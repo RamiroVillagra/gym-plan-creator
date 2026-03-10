@@ -1,17 +1,35 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckCircle2, Circle, Dumbbell, Search } from "lucide-react";
+import { CheckCircle2, Circle, Dumbbell } from "lucide-react";
 import { toast } from "sonner";
 
 export default function WorkoutPage() {
+  const { user, role } = useAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
+
+  // If student, find their linked client record
+  const { data: myClientId } = useQuery({
+    queryKey: ["my-client-id", user?.id],
+    enabled: role === "student" && !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data?.id ?? null;
+    },
+  });
+
+  const effectiveClientId = role === "student" ? (myClientId ?? "") : selectedClient;
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
