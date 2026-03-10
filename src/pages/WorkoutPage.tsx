@@ -41,8 +41,8 @@ export default function WorkoutPage() {
   });
 
   const { data: todayWorkouts } = useQuery({
-    queryKey: ["today-workouts", selectedClient, today],
-    enabled: !!selectedClient,
+    queryKey: ["today-workouts", effectiveClientId, today],
+    enabled: !!effectiveClientId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
