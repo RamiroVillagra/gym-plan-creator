@@ -64,6 +64,7 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -72,6 +73,7 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -80,6 +82,7 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -104,6 +107,84 @@ export type Database = {
           id?: string
           muscle_group?: string | null
           name?: string
+        }
+        Relationships: []
+      }
+      group_members: {
+        Row: {
+          client_id: string
+          created_at: string
+          group_id: string
+          id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          group_id: string
+          id?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          coach_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          coach_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          coach_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
         }
         Relationships: []
       }
@@ -176,6 +257,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       workout_logs: {
         Row: {
           assigned_workout_id: string
@@ -229,10 +328,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "coach" | "student"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -359,6 +464,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["coach", "student"],
+    },
   },
 } as const

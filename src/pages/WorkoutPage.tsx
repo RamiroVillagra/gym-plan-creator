@@ -1,17 +1,35 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckCircle2, Circle, Dumbbell, Search } from "lucide-react";
+import { CheckCircle2, Circle, Dumbbell } from "lucide-react";
 import { toast } from "sonner";
 
 export default function WorkoutPage() {
+  const { user, role } = useAuth();
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
+
+  // If student, find their linked client record
+  const { data: myClientId } = useQuery({
+    queryKey: ["my-client-id", user?.id],
+    enabled: role === "student" && !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data?.id ?? null;
+    },
+  });
+
+  const effectiveClientId = role === "student" ? (myClientId ?? "") : selectedClient;
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
@@ -23,13 +41,13 @@ export default function WorkoutPage() {
   });
 
   const { data: todayWorkouts } = useQuery({
-    queryKey: ["today-workouts", selectedClient, today],
-    enabled: !!selectedClient,
+    queryKey: ["today-workouts", effectiveClientId, today],
+    enabled: !!effectiveClientId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
         .select("*, routines(name, routine_exercises(*, exercises(name, muscle_group)))")
-        .eq("client_id", selectedClient)
+        .eq("client_id", effectiveClientId)
         .eq("workout_date", today);
       if (error) throw error;
       return data;
@@ -98,16 +116,23 @@ export default function WorkoutPage() {
         </p>
       </div>
 
-      <select
-        className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground mb-6"
-        value={selectedClient}
-        onChange={e => setSelectedClient(e.target.value)}
-      >
-        <option value="">Selecciona tu nombre</option>
-        {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      {role === "coach" && (
+        <select
+          className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground mb-6"
+          value={selectedClient}
+          onChange={e => setSelectedClient(e.target.value)}
+        >
+          <option value="">Selecciona un alumno</option>
+          {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
+      {role === "student" && !myClientId && (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Tu cuenta aún no está vinculada a un perfil de alumno. Pedile a tu coach que te vincule.</p>
+        </div>
+      )}
 
-      {selectedClient && !todayWorkouts?.length && (
+      {effectiveClientId && !todayWorkouts?.length && (
         <div className="text-center py-12 text-muted-foreground">
           <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p>No tienes entrenamiento asignado para hoy.</p>
