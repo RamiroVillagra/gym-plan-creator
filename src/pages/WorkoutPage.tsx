@@ -47,7 +47,7 @@ export default function WorkoutPage() {
       const { data, error } = await supabase
         .from("assigned_workouts")
         .select("*, routines(name, routine_exercises(*, exercises(name, muscle_group)))")
-        .eq("client_id", selectedClient)
+        .eq("client_id", effectiveClientId)
         .eq("workout_date", today);
       if (error) throw error;
       return data;
