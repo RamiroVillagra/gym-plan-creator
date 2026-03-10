@@ -132,7 +132,7 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {selectedClient && !todayWorkouts?.length && (
+      {effectiveClientId && !todayWorkouts?.length && (
         <div className="text-center py-12 text-muted-foreground">
           <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-30" />
           <p>No tienes entrenamiento asignado para hoy.</p>
