@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { format, addDays, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -11,12 +12,14 @@ import {
 } from "@/components/ui/dialog";
 
 export default function CalendarPage() {
+  const { role } = useAuth();
   const queryClient = useQueryClient();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [assignOpen, setAssignOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState("");
   const [selectedRoutine, setSelectedRoutine] = useState("");
+  const [filterClient, setFilterClient] = useState("");
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -39,16 +42,20 @@ export default function CalendarPage() {
   });
 
   const { data: workouts } = useQuery({
-    queryKey: ["assigned-workouts", format(weekStart, "yyyy-MM-dd")],
+    queryKey: ["assigned-workouts", format(weekStart, "yyyy-MM-dd"), filterClient],
     queryFn: async () => {
       const start = format(weekStart, "yyyy-MM-dd");
       const end = format(addDays(weekStart, 6), "yyyy-MM-dd");
-      const { data, error } = await supabase
+      let query = supabase
         .from("assigned_workouts")
         .select("*, clients(name), routines(name)")
         .gte("workout_date", start)
         .lte("workout_date", end)
         .order("workout_date");
+      if (filterClient) {
+        query = query.eq("client_id", filterClient);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -86,7 +93,7 @@ export default function CalendarPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-heading font-bold">Calendario</h1>
           <p className="text-muted-foreground">Asigna rutinas a tus clientes por día</p>
@@ -103,6 +110,20 @@ export default function CalendarPage() {
           </Button>
         </div>
       </div>
+
+      {/* Client filter */}
+      {role === "coach" && (
+        <div className="mb-4">
+          <select
+            className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
+            value={filterClient}
+            onChange={e => setFilterClient(e.target.value)}
+          >
+            <option value="">Todos los alumnos</option>
+            {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
         {days.map(day => {
@@ -124,14 +145,16 @@ export default function CalendarPage() {
                     {format(day, "d")}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => { setSelectedDate(day); setAssignOpen(true); }}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
+                {role === "coach" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => { setSelectedDate(day); setAssignOpen(true); }}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                )}
               </div>
               <div className="space-y-1">
                 {dayWorkouts.map((w: any) => (
@@ -142,12 +165,14 @@ export default function CalendarPage() {
                         <p className="text-[10px] text-muted-foreground truncate">{w.routines.name}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => deleteWorkout.mutate(w.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </button>
+                    {role === "coach" && (
+                      <button
+                        onClick={() => deleteWorkout.mutate(w.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
