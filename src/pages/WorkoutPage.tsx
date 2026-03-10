@@ -116,14 +116,21 @@ export default function WorkoutPage() {
         </p>
       </div>
 
-      <select
-        className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground mb-6"
-        value={selectedClient}
-        onChange={e => setSelectedClient(e.target.value)}
-      >
-        <option value="">Selecciona tu nombre</option>
-        {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-      </select>
+      {role === "coach" && (
+        <select
+          className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground mb-6"
+          value={selectedClient}
+          onChange={e => setSelectedClient(e.target.value)}
+        >
+          <option value="">Selecciona un alumno</option>
+          {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
+      {role === "student" && !myClientId && (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Tu cuenta aún no está vinculada a un perfil de alumno. Pedile a tu coach que te vincule.</p>
+        </div>
+      )}
 
       {selectedClient && !todayWorkouts?.length && (
         <div className="text-center py-12 text-muted-foreground">
