@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X } from "lucide-react";
 import { toast } from "sonner";
+import { format, addDays } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
@@ -18,6 +20,18 @@ export default function ClientsPage() {
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Selected client panel
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+
+  // Assign routine dialog
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignRoutineId, setAssignRoutineId] = useState("");
+  const [assignDate, setAssignDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  // Assign group dialog
+  const [groupOpen, setGroupOpen] = useState(false);
+  const [assignGroupId, setAssignGroupId] = useState("");
+
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -27,10 +41,58 @@ export default function ClientsPage() {
     },
   });
 
+  const { data: routines } = useQuery({
+    queryKey: ["routines"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("routines").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: groups } = useQuery({
+    queryKey: ["groups"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("groups").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Client's assigned workouts
+  const { data: clientWorkouts } = useQuery({
+    queryKey: ["client-workouts", selectedClient?.id],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assigned_workouts")
+        .select("*, routines(name)")
+        .eq("client_id", selectedClient.id)
+        .gte("workout_date", format(new Date(), "yyyy-MM-dd"))
+        .order("workout_date");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Client's groups
+  const { data: clientGroups } = useQuery({
+    queryKey: ["client-groups", selectedClient?.id],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("group_members")
+        .select("*, groups(name)")
+        .eq("client_id", selectedClient.id);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const addMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("clients").insert({
-        name, email: email || null, phone: phone || null, notes: notes || null
+        name, email: email || null, phone: phone || null, notes: notes || null,
       });
       if (error) throw error;
     },
@@ -52,7 +114,67 @@ export default function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-count"] });
+      setSelectedClient(null);
       toast.success("Cliente eliminado");
+    },
+  });
+
+  const assignRoutine = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("assigned_workouts").insert({
+        client_id: selectedClient.id,
+        routine_id: assignRoutineId || null,
+        workout_date: assignDate,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setAssignOpen(false);
+      setAssignRoutineId("");
+      toast.success("Rutina asignada");
+    },
+  });
+
+  const removeWorkout = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("assigned_workouts").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      toast.success("Entrenamiento eliminado");
+    },
+  });
+
+  const assignGroup = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("group_members").insert({
+        client_id: selectedClient.id,
+        group_id: assignGroupId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["group-members"] });
+      setGroupOpen(false);
+      setAssignGroupId("");
+      toast.success("Agregado al grupo");
+    },
+    onError: () => toast.error("Error (¿ya está en el grupo?)"),
+  });
+
+  const removeFromGroup = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("group_members").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-groups"] });
+      toast.success("Removido del grupo");
     },
   });
 
@@ -61,6 +183,139 @@ export default function ClientsPage() {
     c.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Client detail panel
+  if (selectedClient) {
+    const existingGroupIds = clientGroups?.map((g: any) => g.group_id) ?? [];
+    const availableGroups = groups?.filter(g => !existingGroupIds.includes(g.id));
+
+    return (
+      <div className="animate-fade-in">
+        <Button variant="ghost" className="mb-4" onClick={() => setSelectedClient(null)}>
+          <ArrowLeft className="h-4 w-4 mr-2" />Volver a Clientes
+        </Button>
+
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-heading font-bold">{selectedClient.name}</h1>
+            <div className="flex gap-3 mt-1 text-sm text-muted-foreground">
+              {selectedClient.email && <span>{selectedClient.email}</span>}
+              {selectedClient.phone && <span>{selectedClient.phone}</span>}
+            </div>
+          </div>
+          <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(selectedClient.id)}>
+            <Trash2 className="h-4 w-4 mr-2" />Eliminar
+          </Button>
+        </div>
+
+        {/* Quick actions */}
+        <div className="flex gap-2 mb-6 flex-wrap">
+          <Button variant="outline" onClick={() => setAssignOpen(true)}>
+            <ClipboardList className="h-4 w-4 mr-2" />Asignar Rutina
+          </Button>
+          <Button variant="outline" onClick={() => setGroupOpen(true)}>
+            <UsersRound className="h-4 w-4 mr-2" />Asignar Grupo
+          </Button>
+        </div>
+
+        {/* Assigned workouts */}
+        <div className="mb-6">
+          <h2 className="text-lg font-heading font-bold mb-3 flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            Próximos Entrenamientos
+          </h2>
+          {!clientWorkouts?.length ? (
+            <p className="text-sm text-muted-foreground">Sin entrenamientos asignados.</p>
+          ) : (
+            <div className="space-y-2">
+              {clientWorkouts.map((w: any) => (
+                <div key={w.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">
+                      {format(new Date(w.workout_date + "T12:00:00"), "EEE d MMM", { locale: es })}
+                    </span>
+                    {w.routines?.name && (
+                      <span className="text-xs text-muted-foreground ml-2">— {w.routines.name}</span>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeWorkout.mutate(w.id)}>
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Groups */}
+        <div>
+          <h2 className="text-lg font-heading font-bold mb-3 flex items-center gap-2">
+            <UsersRound className="h-5 w-5 text-primary" />
+            Grupos
+          </h2>
+          {!clientGroups?.length ? (
+            <p className="text-sm text-muted-foreground">No pertenece a ningún grupo.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {clientGroups.map((g: any) => (
+                <span key={g.id} className="inline-flex items-center gap-1 text-sm px-3 py-1 rounded-full bg-primary/10 text-primary">
+                  {g.groups?.name}
+                  <button onClick={() => removeFromGroup.mutate(g.id)}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Assign routine dialog */}
+        <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Asignar Rutina a {selectedClient.name}</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <select
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={assignRoutineId}
+                onChange={e => setAssignRoutineId(e.target.value)}
+              >
+                <option value="">Seleccionar rutina</option>
+                {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+              <div>
+                <label className="text-xs text-muted-foreground">Fecha</label>
+                <Input type="date" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
+              </div>
+              <Button className="w-full" onClick={() => assignRoutine.mutate()} disabled={!assignRoutineId}>
+                Asignar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Assign group dialog */}
+        <Dialog open={groupOpen} onOpenChange={setGroupOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Agregar a Grupo</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <select
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={assignGroupId}
+                onChange={e => setAssignGroupId(e.target.value)}
+              >
+                <option value="">Seleccionar grupo</option>
+                {availableGroups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+              <Button className="w-full" onClick={() => assignGroup.mutate()} disabled={!assignGroupId}>
+                Agregar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // Client list
   return (
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
@@ -79,9 +334,7 @@ export default function ClientsPage() {
               <Input placeholder="Email (opcional)" value={email} onChange={e => setEmail(e.target.value)} />
               <Input placeholder="Teléfono (opcional)" value={phone} onChange={e => setPhone(e.target.value)} />
               <Input placeholder="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} />
-              <Button className="w-full" onClick={() => addMutation.mutate()} disabled={!name.trim()}>
-                Guardar
-              </Button>
+              <Button className="w-full" onClick={() => addMutation.mutate()} disabled={!name.trim()}>Guardar</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -101,7 +354,11 @@ export default function ClientsPage() {
       ) : (
         <div className="grid gap-2">
           {filtered.map(client => (
-            <div key={client.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors">
+            <button
+              key={client.id}
+              onClick={() => setSelectedClient(client)}
+              className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors w-full text-left"
+            >
               <div>
                 <p className="font-medium text-foreground">{client.name}</p>
                 <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
@@ -109,10 +366,8 @@ export default function ClientsPage() {
                   {client.phone && <span>{client.phone}</span>}
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(client.id)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
+              <span className="text-xs text-muted-foreground">→</span>
+            </button>
           ))}
         </div>
       )}

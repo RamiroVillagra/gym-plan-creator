@@ -86,8 +86,27 @@ export type Database = {
         }
         Relationships: []
       }
+      exercise_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       exercises: {
         Row: {
+          category_id: string | null
           created_at: string
           description: string | null
           id: string
@@ -95,6 +114,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -102,13 +122,22 @@ export type Database = {
           name: string
         }
         Update: {
+          category_id?: string | null
           created_at?: string
           description?: string | null
           id?: string
           muscle_group?: string | null
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "exercises_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       group_members: {
         Row: {
@@ -190,6 +219,8 @@ export type Database = {
       }
       routine_exercises: {
         Row: {
+          block_number: number
+          day_number: number
           exercise_id: string
           id: string
           order_index: number
@@ -200,6 +231,8 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          block_number?: number
+          day_number?: number
           exercise_id: string
           id?: string
           order_index?: number
@@ -210,6 +243,8 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          block_number?: number
+          day_number?: number
           exercise_id?: string
           id?: string
           order_index?: number
@@ -242,18 +277,21 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          total_days: number
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
           name: string
+          total_days?: number
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
           name?: string
+          total_days?: number
         }
         Relationships: []
       }
