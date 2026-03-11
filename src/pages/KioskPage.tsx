@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dumbbell, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
@@ -10,7 +9,6 @@ import { es } from "date-fns/locale";
 import { toast } from "sonner";
 
 export default function KioskPage() {
-  const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
@@ -69,11 +67,8 @@ export default function KioskPage() {
 
   const logSet = useMutation({
     mutationFn: async (params: {
-      assigned_workout_id: string;
-      exercise_id: string;
-      set_number: number;
-      reps_done: number;
-      weight_used: number;
+      assigned_workout_id: string; exercise_id: string;
+      set_number: number; reps_done: number; weight_used: number;
     }) => {
       const existing = existingLogs?.find(
         l => l.assigned_workout_id === params.assigned_workout_id &&
@@ -96,10 +91,9 @@ export default function KioskPage() {
     },
   });
 
-  // Student selected → show routine
   if (selectedClient) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <Button variant="ghost" onClick={() => setSelectedClient(null)}>
             <ArrowLeft className="h-4 w-4 mr-2" />Volver
@@ -120,85 +114,93 @@ export default function KioskPage() {
             <p>No hay entrenamiento asignado para hoy.</p>
           </div>
         ) : (
-          todayWorkouts.map((workout: any) => (
-            <div key={workout.id} className="space-y-4 mb-6">
-              {workout.routines?.name && (
-                <h2 className="text-xl font-heading font-bold text-primary">{workout.routines.name}</h2>
-              )}
-              {workout.routines?.routine_exercises?.map((re: any) => (
-                <KioskExerciseCard
-                  key={re.id}
-                  exercise={re.exercises}
-                  sets={re.sets}
-                  reps={re.reps}
-                  weight={re.weight}
-                  assignedWorkoutId={workout.id}
-                  exerciseId={re.exercise_id}
-                  existingLogs={existingLogs?.filter(
-                    (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
-                  ) ?? []}
-                  onLogSet={logSet.mutate}
-                />
-              ))}
-            </div>
-          ))
+          todayWorkouts.map((workout: any) => {
+            const exercises = workout.routines?.routine_exercises ?? [];
+            // Group by block
+            const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
+
+            return (
+              <div key={workout.id} className="space-y-4 mb-6">
+                {workout.routines?.name && (
+                  <h2 className="text-xl font-heading font-bold text-primary">{workout.routines.name}</h2>
+                )}
+                {blocks.map((blockNum: number) => {
+                  const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);
+                  return (
+                    <div key={blockNum}>
+                      {blocks.length > 1 && (
+                        <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque {blockNum}</p>
+                      )}
+                      {blockExercises.map((re: any) => (
+                        <KioskExerciseCard
+                          key={re.id}
+                          exercise={re.exercises}
+                          sets={re.sets}
+                          reps={re.reps}
+                          weight={re.weight}
+                          assignedWorkoutId={workout.id}
+                          exerciseId={re.exercise_id}
+                          existingLogs={existingLogs?.filter(
+                            (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
+                          ) ?? []}
+                          onLogSet={logSet.mutate}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
         )}
       </div>
     );
   }
 
-  // Group selection / student grid
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-2">
-            <Dumbbell className="h-8 w-8 text-primary" />
-            <span className="font-heading text-2xl font-bold">TrainPro Kiosco</span>
-          </div>
-          <Button variant="outline" size="sm" onClick={signOut}>Salir</Button>
-        </div>
-
-        <div className="mb-8">
-          <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno/grupo:</label>
-          <select
-            className="w-full max-w-sm h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-            value={selectedGroup}
-            onChange={e => setSelectedGroup(e.target.value)}
-          >
-            <option value="">Elegir grupo</option>
-            {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        </div>
-
-        {selectedGroup && (
-          <>
-            <p className="text-sm text-muted-foreground mb-4">
-              Tocá tu nombre para ver tu rutina de hoy:
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {groupMembers?.map((m: any) => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    setSelectedClient(m.clients.id);
-                    setSelectedClientName(m.clients.name);
-                  }}
-                  className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors"
-                >
-                  <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 text-lg font-bold">
-                    {m.clients.name.charAt(0).toUpperCase()}
-                  </div>
-                  <p className="font-medium text-foreground text-sm">{m.clients.name}</p>
-                </button>
-              ))}
-            </div>
-            {groupMembers && !groupMembers.length && (
-              <p className="text-center text-muted-foreground py-8">Este grupo no tiene alumnos.</p>
-            )}
-          </>
-        )}
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center gap-2 mb-8">
+        <Dumbbell className="h-8 w-8 text-primary" />
+        <span className="font-heading text-2xl font-bold">Modo Kiosco</span>
       </div>
+
+      <div className="mb-8">
+        <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno/grupo:</label>
+        <select
+          className="w-full max-w-sm h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          value={selectedGroup}
+          onChange={e => setSelectedGroup(e.target.value)}
+        >
+          <option value="">Elegir grupo</option>
+          {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      </div>
+
+      {selectedGroup && (
+        <>
+          <p className="text-sm text-muted-foreground mb-4">Tocá tu nombre para ver tu rutina de hoy:</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {groupMembers?.map((m: any) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setSelectedClient(m.clients.id);
+                  setSelectedClientName(m.clients.name);
+                }}
+                className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors"
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 text-lg font-bold">
+                  {m.clients.name.charAt(0).toUpperCase()}
+                </div>
+                <p className="font-medium text-foreground text-sm">{m.clients.name}</p>
+              </button>
+            ))}
+          </div>
+          {groupMembers && !groupMembers.length && (
+            <p className="text-center text-muted-foreground py-8">Este grupo no tiene alumnos.</p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -221,7 +223,7 @@ function KioskExerciseCard({
   );
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
+    <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="font-heading font-bold text-foreground">{exercise?.name}</p>

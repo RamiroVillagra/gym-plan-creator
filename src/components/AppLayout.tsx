@@ -3,7 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
 
 const coachNav = [
   { to: "/", label: "Dashboard", icon: Dumbbell },
@@ -12,6 +11,7 @@ const coachNav = [
   { to: "/routines", label: "Rutinas", icon: ClipboardList },
   { to: "/calendar", label: "Calendario", icon: CalendarDays },
   { to: "/groups", label: "Grupos", icon: UsersRound },
+  { to: "/kiosk", label: "Modo Kiosco", icon: Monitor },
 ];
 
 const studentNav = [
@@ -20,7 +20,7 @@ const studentNav = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { role, user, signOut } = useAuth();
+  const { role, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = role === "coach" ? coachNav : studentNav;
@@ -50,26 +50,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="mt-auto space-y-1">
+        <div className="mt-auto">
           {role === "coach" && (
-            <>
-              <Link
-                to="/workout"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
-              >
-                <Dumbbell className="h-4 w-4" />
-                Vista Alumno
-              </Link>
-              <a
-                href="/kiosk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted transition-colors"
-              >
-                <Monitor className="h-4 w-4" />
-                Modo Kiosco
-              </a>
-            </>
+            <Link
+              to="/workout"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted transition-colors mb-1"
+            >
+              <Dumbbell className="h-4 w-4" />
+              Vista Alumno
+            </Link>
           )}
           <button
             onClick={signOut}
@@ -113,24 +102,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
             {role === "coach" && (
-              <>
-                <Link
-                  to="/workout"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium bg-secondary text-secondary-foreground hover:bg-muted mt-4"
-                >
-                  <Dumbbell className="h-5 w-5" />
-                  Vista Alumno
-                </Link>
-                <a
-                  href="/kiosk"
-                  target="_blank"
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium bg-secondary text-secondary-foreground hover:bg-muted"
-                >
-                  <Monitor className="h-5 w-5" />
-                  Modo Kiosco
-                </a>
-              </>
+              <Link
+                to="/workout"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium bg-secondary text-secondary-foreground hover:bg-muted mt-4"
+              >
+                <Dumbbell className="h-5 w-5" />
+                Vista Alumno
+              </Link>
             )}
             <button
               onClick={() => { setMobileOpen(false); signOut(); }}

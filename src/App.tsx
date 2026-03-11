@@ -31,7 +31,6 @@ function ProtectedRoutes() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  // Student goes directly to their workout view
   if (role === "student") {
     return (
       <AppLayout>
@@ -44,7 +43,6 @@ function ProtectedRoutes() {
     );
   }
 
-  // Coach gets full access
   return (
     <AppLayout>
       <Routes>
@@ -55,6 +53,7 @@ function ProtectedRoutes() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/groups" element={<GroupsPage />} />
         <Route path="/workout" element={<WorkoutPage />} />
+        <Route path="/kiosk" element={<KioskPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
@@ -70,7 +69,6 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<AuthPageWrapper />} />
-            <Route path="/kiosk" element={<KioskWrapper />} />
             <Route path="/*" element={<ProtectedRoutes />} />
           </Routes>
         </BrowserRouter>
@@ -84,13 +82,6 @@ function AuthPageWrapper() {
   if (loading) return null;
   if (user) return <Navigate to="/" replace />;
   return <AuthPage />;
-}
-
-function KioskWrapper() {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  return <KioskPage />;
 }
 
 export default App;

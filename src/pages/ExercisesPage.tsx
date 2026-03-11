@@ -3,47 +3,128 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
-
-const MUSCLE_GROUPS = ["Pecho", "Espalda", "Piernas", "Hombros", "Bíceps", "Tríceps", "Core", "Glúteos", "Cardio", "Otro"];
 
 export default function ExercisesPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
-  const [muscleGroup, setMuscleGroup] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
 
-  const { data: exercises, isLoading } = useQuery({
-    queryKey: ["exercises"],
+  // Edit exercise
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+
+  // Category management
+  const [catOpen, setCatOpen] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState("");
+
+  const { data: categories } = useQuery({
+    queryKey: ["exercise-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("exercises").select("*").order("name");
+      const { data, error } = await supabase.from("exercise_categories").select("*").order("name");
       if (error) throw error;
       return data;
     },
   });
 
-  const addMutation = useMutation({
+  const { data: exercises, isLoading } = useQuery({
+    queryKey: ["exercises"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("exercises").select("*, exercise_categories(name)").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Category mutations
+  const addCategory = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("exercises").insert({ name, muscle_group: muscleGroup || null, description: description || null });
+      const { error } = await supabase.from("exercise_categories").insert({ name: newCatName });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exercise-categories"] });
+      setNewCatName("");
+      toast.success("Categoría creada");
+    },
+  });
+
+  const updateCategory = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("exercise_categories").update({ name: editingCatName }).eq("id", editingCatId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exercise-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["exercises"] });
+      setEditingCatId(null);
+      toast.success("Categoría actualizada");
+    },
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("exercise_categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exercise-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["exercises"] });
+      toast.success("Categoría eliminada");
+    },
+  });
+
+  // Exercise mutations
+  const addExercise = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("exercises").insert({
+        name,
+        category_id: categoryId || null,
+        muscle_group: categoryId ? categories?.find(c => c.id === categoryId)?.name ?? null : null,
+        description: description || null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
       queryClient.invalidateQueries({ queryKey: ["exercises-count"] });
-      setName(""); setMuscleGroup(""); setDescription("");
+      setName(""); setCategoryId(""); setDescription("");
       setOpen(false);
       toast.success("Ejercicio agregado");
     },
     onError: () => toast.error("Error al agregar ejercicio"),
   });
 
-  const deleteMutation = useMutation({
+  const updateExercise = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("exercises").update({
+        name: editName,
+        category_id: editCategoryId || null,
+        muscle_group: editCategoryId ? categories?.find(c => c.id === editCategoryId)?.name ?? null : null,
+        description: editDescription || null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["exercises"] });
+      setEditOpen(false);
+      toast.success("Ejercicio actualizado");
+    },
+  });
+
+  const deleteExercise = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("exercises").delete().eq("id", id);
       if (error) throw error;
@@ -57,6 +138,7 @@ export default function ExercisesPage() {
 
   const filtered = exercises?.filter(e =>
     e.name.toLowerCase().includes(search.toLowerCase()) ||
+    ((e as any).exercise_categories?.name?.toLowerCase().includes(search.toLowerCase())) ||
     (e.muscle_group?.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -67,41 +149,37 @@ export default function ExercisesPage() {
           <h1 className="text-3xl font-heading font-bold">Ejercicios</h1>
           <p className="text-muted-foreground">Biblioteca de ejercicios disponibles</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Agregar</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nuevo Ejercicio</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              <Input placeholder="Nombre del ejercicio" value={name} onChange={e => setName(e.target.value)} />
-              <select
-                className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-                value={muscleGroup}
-                onChange={e => setMuscleGroup(e.target.value)}
-              >
-                <option value="">Grupo muscular (opcional)</option>
-                {MUSCLE_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-              <Input placeholder="Descripción (opcional)" value={description} onChange={e => setDescription(e.target.value)} />
-              <Button className="w-full" onClick={() => addMutation.mutate()} disabled={!name.trim()}>
-                Guardar
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCatOpen(true)}>
+            <Tag className="h-4 w-4 mr-2" />Categorías
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="h-4 w-4 mr-2" />Agregar</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Nuevo Ejercicio</DialogTitle></DialogHeader>
+              <div className="space-y-4 mt-4">
+                <Input placeholder="Nombre del ejercicio" value={name} onChange={e => setName(e.target.value)} />
+                <select
+                  className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                  value={categoryId}
+                  onChange={e => setCategoryId(e.target.value)}
+                >
+                  <option value="">Categoría (opcional)</option>
+                  {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <Input placeholder="Descripción (opcional)" value={description} onChange={e => setDescription(e.target.value)} />
+                <Button className="w-full" onClick={() => addExercise.mutate()} disabled={!name.trim()}>Guardar</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar ejercicios..."
-          className="pl-10"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <Input placeholder="Buscar ejercicios..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {isLoading ? (
@@ -109,7 +187,6 @@ export default function ExercisesPage() {
       ) : !filtered?.length ? (
         <div className="text-center py-12 text-muted-foreground">
           <p>No hay ejercicios{search ? " que coincidan" : ""}.</p>
-          <p className="text-sm mt-1">Agrega uno para comenzar.</p>
         </div>
       ) : (
         <div className="grid gap-2">
@@ -118,19 +195,103 @@ export default function ExercisesPage() {
               <div>
                 <p className="font-medium text-foreground">{ex.name}</p>
                 <div className="flex gap-2 mt-1">
-                  {ex.muscle_group && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{ex.muscle_group}</span>
+                  {((ex as any).exercise_categories?.name || ex.muscle_group) && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {(ex as any).exercise_categories?.name || ex.muscle_group}
+                    </span>
                   )}
                   {ex.description && <span className="text-xs text-muted-foreground">{ex.description}</span>}
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(ex.id)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" onClick={() => {
+                  setEditId(ex.id);
+                  setEditName(ex.name);
+                  setEditCategoryId((ex as any).category_id ?? "");
+                  setEditDescription(ex.description ?? "");
+                  setEditOpen(true);
+                }}>
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => deleteExercise.mutate(ex.id)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Edit exercise dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Ejercicio</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-4">
+            <Input placeholder="Nombre" value={editName} onChange={e => setEditName(e.target.value)} />
+            <select
+              className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+              value={editCategoryId}
+              onChange={e => setEditCategoryId(e.target.value)}
+            >
+              <option value="">Sin categoría</option>
+              {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <Input placeholder="Descripción" value={editDescription} onChange={e => setEditDescription(e.target.value)} />
+            <Button className="w-full" onClick={() => updateExercise.mutate()} disabled={!editName.trim()}>Guardar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category management dialog */}
+      <Dialog open={catOpen} onOpenChange={setCatOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Gestionar Categorías</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="flex gap-2">
+              <Input placeholder="Nueva categoría" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+              <Button onClick={() => addCategory.mutate()} disabled={!newCatName.trim()}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-auto">
+              {categories?.map(cat => (
+                <div key={cat.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
+                  {editingCatId === cat.id ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input
+                        className="h-8"
+                        value={editingCatName}
+                        onChange={e => setEditingCatName(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && updateCategory.mutate()}
+                      />
+                      <Button size="sm" onClick={() => updateCategory.mutate()}>Ok</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingCatId(null)}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-sm text-foreground">{cat.name}</span>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                          setEditingCatId(cat.id);
+                          setEditingCatName(cat.name);
+                        }}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteCategory.mutate(cat.id)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              {!categories?.length && <p className="text-sm text-muted-foreground text-center py-2">No hay categorías</p>}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
