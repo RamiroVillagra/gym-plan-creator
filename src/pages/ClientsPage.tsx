@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { format, addDays } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
+import RoutineDetailView from "@/components/RoutineDetailView";
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
@@ -20,7 +21,6 @@ export default function ClientsPage() {
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Selected client panel
   const [selectedClient, setSelectedClient] = useState<any>(null);
 
   // Assign routine dialog
@@ -31,6 +31,17 @@ export default function ClientsPage() {
   // Assign group dialog
   const [groupOpen, setGroupOpen] = useState(false);
   const [assignGroupId, setAssignGroupId] = useState("");
+
+  // Create routine dialog
+  const [createRoutineOpen, setCreateRoutineOpen] = useState(false);
+  const [newRoutineName, setNewRoutineName] = useState("");
+  const [newRoutineDesc, setNewRoutineDesc] = useState("");
+  const [newRoutineDays, setNewRoutineDays] = useState("1");
+
+  // View routine detail
+  const [viewRoutineId, setViewRoutineId] = useState<string | null>(null);
+  const [viewRoutineName, setViewRoutineName] = useState("");
+  const [viewRoutineDays, setViewRoutineDays] = useState(1);
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
@@ -59,14 +70,13 @@ export default function ClientsPage() {
     },
   });
 
-  // Client's assigned workouts
   const { data: clientWorkouts } = useQuery({
     queryKey: ["client-workouts", selectedClient?.id],
     enabled: !!selectedClient,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name)")
+        .select("*, routines(name, total_days)")
         .eq("client_id", selectedClient.id)
         .gte("workout_date", format(new Date(), "yyyy-MM-dd"))
         .order("workout_date");
@@ -75,7 +85,6 @@ export default function ClientsPage() {
     },
   });
 
-  // Client's groups
   const { data: clientGroups } = useQuery({
     queryKey: ["client-groups", selectedClient?.id],
     enabled: !!selectedClient,
@@ -178,6 +187,29 @@ export default function ClientsPage() {
     },
   });
 
+  const createRoutine = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.from("routines").insert({
+        name: newRoutineName,
+        description: newRoutineDesc || null,
+        total_days: parseInt(newRoutineDays) || 1,
+      }).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      setCreateRoutineOpen(false);
+      setNewRoutineName(""); setNewRoutineDesc(""); setNewRoutineDays("1");
+      // Open it for editing
+      setViewRoutineId(data.id);
+      setViewRoutineName(data.name);
+      setViewRoutineDays(data.total_days);
+      toast.success("Rutina creada, ahora podés agregar ejercicios");
+    },
+    onError: () => toast.error("Error al crear rutina"),
+  });
+
   const filtered = clients?.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.email?.toLowerCase().includes(search.toLowerCase())
@@ -212,6 +244,9 @@ export default function ClientsPage() {
           <Button variant="outline" onClick={() => setAssignOpen(true)}>
             <ClipboardList className="h-4 w-4 mr-2" />Asignar Rutina
           </Button>
+          <Button variant="outline" onClick={() => setCreateRoutineOpen(true)}>
+            <FileText className="h-4 w-4 mr-2" />Crear Rutina
+          </Button>
           <Button variant="outline" onClick={() => setGroupOpen(true)}>
             <UsersRound className="h-4 w-4 mr-2" />Asignar Grupo
           </Button>
@@ -229,7 +264,7 @@ export default function ClientsPage() {
             <div className="space-y-2">
               {clientWorkouts.map((w: any) => (
                 <div key={w.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2">
-                  <div>
+                  <div className="flex-1">
                     <span className="text-sm font-medium text-foreground">
                       {format(new Date(w.workout_date + "T12:00:00"), "EEE d MMM", { locale: es })}
                     </span>
@@ -237,9 +272,20 @@ export default function ClientsPage() {
                       <span className="text-xs text-muted-foreground ml-2">— {w.routines.name}</span>
                     )}
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => removeWorkout.mutate(w.id)}>
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
+                  <div className="flex gap-1">
+                    {w.routine_id && (
+                      <Button variant="ghost" size="icon" onClick={() => {
+                        setViewRoutineId(w.routine_id);
+                        setViewRoutineName(w.routines?.name || "Rutina");
+                        setViewRoutineDays(w.routines?.total_days || 1);
+                      }}>
+                        <Eye className="h-3 w-3 text-primary" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => removeWorkout.mutate(w.id)}>
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -309,6 +355,41 @@ export default function ClientsPage() {
                 Agregar
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Create routine dialog */}
+        <Dialog open={createRoutineOpen} onOpenChange={setCreateRoutineOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Crear Rutina para {selectedClient.name}</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              <Input placeholder="Nombre de la rutina *" value={newRoutineName} onChange={e => setNewRoutineName(e.target.value)} />
+              <Input placeholder="Descripción (opcional)" value={newRoutineDesc} onChange={e => setNewRoutineDesc(e.target.value)} />
+              <div>
+                <label className="text-xs text-muted-foreground">Días de entrenamiento</label>
+                <Input type="number" min="1" max="7" value={newRoutineDays} onChange={e => setNewRoutineDays(e.target.value)} />
+              </div>
+              <Button className="w-full" onClick={() => createRoutine.mutate()} disabled={!newRoutineName.trim()}>
+                Crear Rutina
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* View/Edit routine detail dialog */}
+        <Dialog open={!!viewRoutineId} onOpenChange={() => setViewRoutineId(null)}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Plan: {viewRoutineName}</DialogTitle></DialogHeader>
+            {viewRoutineId && (
+              <div className="mt-4">
+                <RoutineDetailView
+                  routineId={viewRoutineId}
+                  routineName={viewRoutineName}
+                  totalDays={viewRoutineDays}
+                  editable
+                />
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>

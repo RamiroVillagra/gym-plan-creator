@@ -9,11 +9,12 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from "@/components/ui/dialog";
+import RoutineDetailView from "@/components/RoutineDetailView";
 
 type ViewMode = "month" | "week" | "day";
 
@@ -29,6 +30,14 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedClient, setSelectedClient] = useState("");
   const [selectedRoutine, setSelectedRoutine] = useState("");
+
+  // Edit workout dialog
+  const [editWorkoutOpen, setEditWorkoutOpen] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<any>(null);
+  const [editWorkoutRoutine, setEditWorkoutRoutine] = useState("");
+
+  // Workout detail dialog (view exercises)
+  const [detailWorkout, setDetailWorkout] = useState<any>(null);
 
   // Bulk assign dialog
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -48,6 +57,15 @@ export default function CalendarPage() {
     },
   });
 
+  const { data: groups } = useQuery({
+    queryKey: ["groups"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("groups").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: routines } = useQuery({
     queryKey: ["routines"],
     queryFn: async () => {
@@ -62,7 +80,7 @@ export default function CalendarPage() {
     queryFn: async () => {
       let query = supabase
         .from("assigned_workouts")
-        .select("*, clients(name), routines(name)")
+        .select("*, clients(name), routines(name, total_days)")
         .gte("workout_date", dateRange.start)
         .lte("workout_date", dateRange.end)
         .order("workout_date");
@@ -87,6 +105,21 @@ export default function CalendarPage() {
       setAssignOpen(false);
       setSelectedClient(""); setSelectedRoutine("");
       toast.success("Entrenamiento asignado");
+    },
+  });
+
+  const updateWorkout = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("assigned_workouts").update({
+        routine_id: editWorkoutRoutine || null,
+      }).eq("id", editingWorkout.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setEditWorkoutOpen(false);
+      setEditingWorkout(null);
+      toast.success("Entrenamiento actualizado");
     },
   });
 
@@ -135,6 +168,8 @@ export default function CalendarPage() {
 
   const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   const toggleBulkDay = (d: number) => setBulkDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+
+  const isClientFiltered = !!filterClient;
 
   return (
     <div className="animate-fade-in">
@@ -203,26 +238,20 @@ export default function CalendarPage() {
           date={currentDate}
           workouts={workouts?.filter((w: any) => w.workout_date === format(currentDate, "yyyy-MM-dd")) ?? []}
           role={role}
+          isClientFiltered={isClientFiltered}
           onAdd={() => { setSelectedDate(currentDate); setAssignOpen(true); }}
           onDelete={(id) => deleteWorkout.mutate(id)}
+          onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}
+          onViewDetail={(w) => setDetailWorkout(w)}
         />
       ) : (
         <div>
-          {viewMode === "week" && (
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {dayNames.map(d => (
-                <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
-              ))}
-            </div>
-          )}
-          {viewMode === "month" && (
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {dayNames.map(d => (
-                <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
-              ))}
-            </div>
-          )}
-          <div className={`grid grid-cols-7 gap-1`}>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {dayNames.map(d => (
+              <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
             {days.map(day => {
               const dateStr = format(day, "yyyy-MM-dd");
               const dayWorkouts = workouts?.filter((w: any) => w.workout_date === dateStr) ?? [];
@@ -247,15 +276,31 @@ export default function CalendarPage() {
                   </p>
                   <div className="space-y-0.5">
                     {dayWorkouts.slice(0, 3).map((w: any) => (
-                      <div key={w.id} className="bg-secondary/50 rounded px-1.5 py-0.5 flex items-center justify-between group text-[10px]">
-                        <span className="text-foreground truncate">{w.clients?.name}</span>
+                      <div
+                        key={w.id}
+                        className="bg-secondary/50 rounded px-1.5 py-0.5 flex items-center justify-between group text-[10px] cursor-pointer"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (isClientFiltered && w.routine_id) {
+                            setDetailWorkout(w);
+                          }
+                        }}
+                      >
+                        <span className="text-foreground truncate">
+                          {isClientFiltered
+                            ? (w.routines?.name || "Sin rutina")
+                            : w.clients?.name
+                          }
+                        </span>
                         {role === "coach" && (
-                          <button
-                            onClick={e => { e.stopPropagation(); deleteWorkout.mutate(w.id); }}
-                            className="opacity-0 group-hover:opacity-100 ml-1"
-                          >
-                            <Trash2 className="h-2.5 w-2.5 text-destructive" />
-                          </button>
+                          <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
+                            <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}>
+                              <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); deleteWorkout.mutate(w.id); }}>
+                              <Trash2 className="h-2.5 w-2.5 text-destructive" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -299,6 +344,56 @@ export default function CalendarPage() {
               Asignar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit workout dialog */}
+      <Dialog open={editWorkoutOpen} onOpenChange={setEditWorkoutOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modificar Entrenamiento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            {editingWorkout && (
+              <p className="text-sm text-muted-foreground">
+                {editingWorkout.clients?.name} — {format(new Date(editingWorkout.workout_date + "T12:00:00"), "d MMM yyyy", { locale: es })}
+              </p>
+            )}
+            <select
+              className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+              value={editWorkoutRoutine}
+              onChange={e => setEditWorkoutRoutine(e.target.value)}
+            >
+              <option value="">Sin rutina</option>
+              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            <Button className="w-full" onClick={() => updateWorkout.mutate()}>
+              Guardar Cambios
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Workout detail dialog (routine exercises) */}
+      <Dialog open={!!detailWorkout} onOpenChange={() => setDetailWorkout(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {detailWorkout?.clients?.name} — {detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM yyyy", { locale: es })}
+            </DialogTitle>
+          </DialogHeader>
+          {detailWorkout?.routine_id ? (
+            <div className="mt-4">
+              <RoutineDetailView
+                routineId={detailWorkout.routine_id}
+                routineName={detailWorkout.routines?.name || "Rutina"}
+                totalDays={detailWorkout.routines?.total_days || 1}
+                editable={role === "coach"}
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground mt-4">Sin rutina asignada.</p>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -353,9 +448,9 @@ export default function CalendarPage() {
   );
 }
 
-function DayView({ date, workouts, role, onAdd, onDelete }: {
-  date: Date; workouts: any[]; role: string | null;
-  onAdd: () => void; onDelete: (id: string) => void;
+function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail }: {
+  date: Date; workouts: any[]; role: string | null; isClientFiltered: boolean;
+  onAdd: () => void; onDelete: (id: string) => void; onEdit: (w: any) => void; onViewDetail: (w: any) => void;
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-6">
@@ -372,15 +467,24 @@ function DayView({ date, workouts, role, onAdd, onDelete }: {
       ) : (
         <div className="space-y-2">
           {workouts.map((w: any) => (
-            <div key={w.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3">
+            <div
+              key={w.id}
+              className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3 cursor-pointer hover:bg-secondary/70 transition-colors"
+              onClick={() => { if (w.routine_id) onViewDetail(w); }}
+            >
               <div>
                 <p className="font-medium text-foreground">{w.clients?.name}</p>
                 {w.routines?.name && <p className="text-xs text-muted-foreground">{w.routines.name}</p>}
               </div>
               {role === "coach" && (
-                <Button variant="ghost" size="icon" onClick={() => onDelete(w.id)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); onEdit(w); }}>
+                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); onDelete(w.id); }}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               )}
             </div>
           ))}
@@ -397,21 +501,12 @@ function getDateRange(viewMode: ViewMode, currentDate: Date) {
     const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
     const calEnd = addDays(startOfWeek(addDays(monthEnd, 6), { weekStartsOn: 1 }), 6);
     const days = eachDayOfInterval({ start: calStart, end: calEnd }).slice(0, 42);
-    return {
-      dateRange: { start: format(calStart, "yyyy-MM-dd"), end: format(calEnd, "yyyy-MM-dd") },
-      days,
-    };
+    return { dateRange: { start: format(calStart, "yyyy-MM-dd"), end: format(calEnd, "yyyy-MM-dd") }, days };
   } else if (viewMode === "week") {
     const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
     const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-    return {
-      dateRange: { start: format(weekStart, "yyyy-MM-dd"), end: format(addDays(weekStart, 6), "yyyy-MM-dd") },
-      days,
-    };
+    return { dateRange: { start: format(weekStart, "yyyy-MM-dd"), end: format(addDays(weekStart, 6), "yyyy-MM-dd") }, days };
   } else {
-    return {
-      dateRange: { start: format(currentDate, "yyyy-MM-dd"), end: format(currentDate, "yyyy-MM-dd") },
-      days: [currentDate],
-    };
+    return { dateRange: { start: format(currentDate, "yyyy-MM-dd"), end: format(currentDate, "yyyy-MM-dd") }, days: [currentDate] };
   }
 }
