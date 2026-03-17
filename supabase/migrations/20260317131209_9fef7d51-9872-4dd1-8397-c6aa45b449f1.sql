@@ -1,0 +1,1 @@
+ALTER TABLE public.routines ADD COLUMN folder text DEFAULT null;
