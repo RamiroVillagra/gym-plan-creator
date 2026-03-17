@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle } from "lucide-react";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -13,12 +13,24 @@ export default function KioskPage() {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [selectedClientName, setSelectedClientName] = useState("");
+  const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
 
   const { data: groups } = useQuery({
     queryKey: ["groups"],
     queryFn: async () => {
       const { data, error } = await supabase.from("groups").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: allClients } = useQuery({
+    queryKey: ["clients"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clients").select("id, name").order("name");
       if (error) throw error;
       return data;
     },
@@ -56,10 +68,7 @@ export default function KioskPage() {
     enabled: !!todayWorkouts?.length,
     queryFn: async () => {
       const ids = todayWorkouts!.map((w: any) => w.id);
-      const { data, error } = await supabase
-        .from("workout_logs")
-        .select("*")
-        .in("assigned_workout_id", ids);
+      const { data, error } = await supabase.from("workout_logs").select("*").in("assigned_workout_id", ids);
       if (error) throw error;
       return data;
     },
@@ -91,6 +100,18 @@ export default function KioskPage() {
     },
   });
 
+  // Combine group members + manual clients
+  const groupClientIds = groupMembers?.map((m: any) => m.clients.id) ?? [];
+  const allKioskClients = [
+    ...(groupMembers?.map((m: any) => ({ id: m.clients.id, name: m.clients.name })) ?? []),
+    ...manualClients.filter(c => !groupClientIds.includes(c.id)),
+  ];
+
+  const filteredSearch = allClients?.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) &&
+    !allKioskClients.some(k => k.id === c.id)
+  ) ?? [];
+
   if (selectedClient) {
     return (
       <div className="max-w-2xl mx-auto">
@@ -116,7 +137,6 @@ export default function KioskPage() {
         ) : (
           todayWorkouts.map((workout: any) => {
             const exercises = workout.routines?.routine_exercises ?? [];
-            // Group by block
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
 
             return (
@@ -164,39 +184,80 @@ export default function KioskPage() {
         <span className="font-heading text-2xl font-bold">Modo Kiosco</span>
       </div>
 
-      <div className="mb-8">
-        <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno/grupo:</label>
-        <select
-          className="w-full max-w-sm h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-          value={selectedGroup}
-          onChange={e => setSelectedGroup(e.target.value)}
-        >
-          <option value="">Elegir grupo</option>
-          {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-        </select>
+      <div className="flex gap-4 mb-8 flex-wrap">
+        <div className="flex-1 min-w-[200px]">
+          <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno/grupo:</label>
+          <select
+            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            value={selectedGroup}
+            onChange={e => setSelectedGroup(e.target.value)}
+          >
+            <option value="">Elegir grupo</option>
+            {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </div>
+        <div className="flex items-end">
+          <Button variant="outline" onClick={() => setSearchOpen(!searchOpen)}>
+            <UserPlus className="h-4 w-4 mr-2" />Agregar Alumno
+          </Button>
+        </div>
       </div>
 
-      {selectedGroup && (
+      {searchOpen && (
+        <div className="mb-6 bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-foreground">Buscar alumno</p>
+            <button onClick={() => { setSearchOpen(false); setClientSearch(""); }}>
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Buscar por nombre..." className="pl-10" value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
+          </div>
+          {clientSearch && (
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {filteredSearch.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setManualClients(prev => [...prev, { id: c.id, name: c.name }]);
+                    setClientSearch("");
+                    setSearchOpen(false);
+                    toast.success(`${c.name} agregado al kiosco`);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-secondary/50 text-sm text-foreground"
+                >
+                  {c.name}
+                </button>
+              ))}
+              {!filteredSearch.length && <p className="text-xs text-muted-foreground px-3">Sin resultados.</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(selectedGroup || allKioskClients.length > 0) && (
         <>
           <p className="text-sm text-muted-foreground mb-4">Tocá tu nombre para ver tu rutina de hoy:</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {groupMembers?.map((m: any) => (
+            {allKioskClients.map(c => (
               <button
-                key={m.id}
+                key={c.id}
                 onClick={() => {
-                  setSelectedClient(m.clients.id);
-                  setSelectedClientName(m.clients.name);
+                  setSelectedClient(c.id);
+                  setSelectedClientName(c.name);
                 }}
                 className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors"
               >
                 <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 text-lg font-bold">
-                  {m.clients.name.charAt(0).toUpperCase()}
+                  {c.name.charAt(0).toUpperCase()}
                 </div>
-                <p className="font-medium text-foreground text-sm">{m.clients.name}</p>
+                <p className="font-medium text-foreground text-sm">{c.name}</p>
               </button>
             ))}
           </div>
-          {groupMembers && !groupMembers.length && (
+          {allKioskClients.length === 0 && (
             <p className="text-center text-muted-foreground py-8">Este grupo no tiene alumnos.</p>
           )}
         </>

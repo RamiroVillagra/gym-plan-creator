@@ -15,16 +15,11 @@ export default function WorkoutPage() {
   const [selectedClient, setSelectedClient] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
 
-  // If student, find their linked client record
   const { data: myClientId } = useQuery({
     queryKey: ["my-client-id", user?.id],
     enabled: role === "student" && !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("user_id", user!.id)
-        .maybeSingle();
+      const { data } = await supabase.from("clients").select("id").eq("user_id", user!.id).maybeSingle();
       return data?.id ?? null;
     },
   });
@@ -59,10 +54,7 @@ export default function WorkoutPage() {
     enabled: !!todayWorkouts?.length,
     queryFn: async () => {
       const workoutIds = todayWorkouts!.map((w: any) => w.id);
-      const { data, error } = await supabase
-        .from("workout_logs")
-        .select("*")
-        .in("assigned_workout_id", workoutIds);
+      const { data, error } = await supabase.from("workout_logs").select("*").in("assigned_workout_id", workoutIds);
       if (error) throw error;
       return data;
     },
@@ -70,31 +62,21 @@ export default function WorkoutPage() {
 
   const logSet = useMutation({
     mutationFn: async (params: {
-      assigned_workout_id: string;
-      exercise_id: string;
-      set_number: number;
-      reps_done: number;
-      weight_used: number;
+      assigned_workout_id: string; exercise_id: string;
+      set_number: number; reps_done: number; weight_used: number;
     }) => {
-      // Check if log exists
       const existing = existingLogs?.find(
         l => l.assigned_workout_id === params.assigned_workout_id &&
           l.exercise_id === params.exercise_id &&
           l.set_number === params.set_number
       );
-
       if (existing) {
         const { error } = await supabase.from("workout_logs").update({
-          reps_done: params.reps_done,
-          weight_used: params.weight_used,
-          completed: true,
+          reps_done: params.reps_done, weight_used: params.weight_used, completed: true,
         }).eq("id", existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("workout_logs").insert({
-          ...params,
-          completed: true,
-        });
+        const { error } = await supabase.from("workout_logs").insert({ ...params, completed: true });
         if (error) throw error;
       }
     },
@@ -139,29 +121,43 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {todayWorkouts?.map((workout: any) => (
-        <div key={workout.id} className="space-y-4">
-          {workout.routines?.name && (
-            <h2 className="text-xl font-heading font-bold text-primary">{workout.routines.name}</h2>
-          )}
+      {todayWorkouts?.map((workout: any) => {
+        const exercises = workout.routines?.routine_exercises ?? [];
+        const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
 
-          {workout.routines?.routine_exercises?.map((re: any) => (
-            <ExerciseCard
-              key={re.id}
-              exercise={re.exercises}
-              sets={re.sets}
-              reps={re.reps}
-              weight={re.weight}
-              assignedWorkoutId={workout.id}
-              exerciseId={re.exercise_id}
-              existingLogs={existingLogs?.filter(
-                (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
-              ) ?? []}
-              onLogSet={logSet.mutate}
-            />
-          ))}
-        </div>
-      ))}
+        return (
+          <div key={workout.id} className="space-y-4 mb-6">
+            {workout.routines?.name && (
+              <h2 className="text-xl font-heading font-bold text-primary">{workout.routines.name}</h2>
+            )}
+            {blocks.map((blockNum: number) => {
+              const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);
+              return (
+                <div key={blockNum}>
+                  {blocks.length > 1 && (
+                    <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque {blockNum}</p>
+                  )}
+                  {blockExercises.map((re: any) => (
+                    <ExerciseCard
+                      key={re.id}
+                      exercise={re.exercises}
+                      sets={re.sets}
+                      reps={re.reps}
+                      weight={re.weight}
+                      assignedWorkoutId={workout.id}
+                      exerciseId={re.exercise_id}
+                      existingLogs={existingLogs?.filter(
+                        (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
+                      ) ?? []}
+                      onLogSet={logSet.mutate}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -169,27 +165,22 @@ export default function WorkoutPage() {
 function ExerciseCard({
   exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, onLogSet
 }: {
-  exercise: any;
-  sets: number;
-  reps: number;
-  weight: number | null;
-  assignedWorkoutId: string;
-  exerciseId: string;
-  existingLogs: any[];
+  exercise: any; sets: number; reps: number; weight: number | null;
+  assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
 }) {
-  const [localSets, setLocalSets] = useState<{ reps: string; weight: string }[]>(
+  const [localSets, setLocalSets] = useState<{ reps: string; weightDone: string }[]>(
     Array.from({ length: sets }, (_, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
       return {
         reps: log?.reps_done?.toString() ?? reps.toString(),
-        weight: log?.weight_used?.toString() ?? (weight?.toString() ?? ""),
+        weightDone: log?.weight_used?.toString() ?? "",
       };
     })
   );
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
+    <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div>
           <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
@@ -200,16 +191,26 @@ function ExerciseCard({
         <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
       </div>
 
+      {/* Header row */}
+      <div className="flex items-center gap-3 mb-1 px-0">
+        <span className="text-[10px] text-muted-foreground w-12"></span>
+        <span className="text-[10px] text-muted-foreground w-14 text-center">Series</span>
+        <span className="text-[10px] text-muted-foreground w-14 text-center">Reps</span>
+        <span className="text-[10px] text-muted-foreground w-20 text-center">Planif.</span>
+        <span className="text-[10px] text-muted-foreground w-20 text-center">Realiz.</span>
+        <span className="w-5"></span>
+      </div>
+
       <div className="space-y-2">
         {localSets.map((s, i) => {
           const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
           return (
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
+              <span className="text-xs text-foreground w-14 text-center">{sets}</span>
               <Input
                 type="number"
-                placeholder="Reps"
-                className="w-20 h-8 text-sm"
+                className="w-14 h-8 text-sm text-center"
                 value={s.reps}
                 onChange={e => {
                   const next = [...localSets];
@@ -217,14 +218,15 @@ function ExerciseCard({
                   setLocalSets(next);
                 }}
               />
+              <span className="text-xs text-muted-foreground w-20 text-center">{weight ? `${weight}kg` : "—"}</span>
               <Input
                 type="number"
                 placeholder="Kg"
                 className="w-20 h-8 text-sm"
-                value={s.weight}
+                value={s.weightDone}
                 onChange={e => {
                   const next = [...localSets];
-                  next[i].weight = e.target.value;
+                  next[i].weightDone = e.target.value;
                   setLocalSets(next);
                 }}
               />
@@ -234,9 +236,8 @@ function ExerciseCard({
                   exercise_id: exerciseId,
                   set_number: i + 1,
                   reps_done: parseInt(s.reps) || 0,
-                  weight_used: parseFloat(s.weight) || 0,
+                  weight_used: parseFloat(s.weightDone) || 0,
                 })}
-                className="transition-colors"
               >
                 {isLogged ? (
                   <CheckCircle2 className="h-5 w-5 text-primary" />
