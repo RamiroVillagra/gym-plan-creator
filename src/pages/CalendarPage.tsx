@@ -374,9 +374,9 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Workout detail dialog (routine exercises) */}
+      {/* Workout detail dialog (routine exercises - fully editable) */}
       <Dialog open={!!detailWorkout} onOpenChange={() => setDetailWorkout(null)}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {detailWorkout?.clients?.name} — {detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM yyyy", { locale: es })}
@@ -384,6 +384,7 @@ export default function CalendarPage() {
           </DialogHeader>
           {detailWorkout?.routine_id ? (
             <div className="mt-4">
+              <p className="text-xs text-muted-foreground mb-3">Tocá un ejercicio para editar series, reps o peso. Los cambios modifican la rutina base.</p>
               <RoutineDetailView
                 routineId={detailWorkout.routine_id}
                 routineName={detailWorkout.routines?.name || "Rutina"}
