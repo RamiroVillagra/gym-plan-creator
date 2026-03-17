@@ -281,7 +281,7 @@ export default function CalendarPage() {
                         className="bg-secondary/50 rounded px-1.5 py-0.5 flex items-center justify-between group text-[10px] cursor-pointer"
                         onClick={e => {
                           e.stopPropagation();
-                          if (isClientFiltered && w.routine_id) {
+                          if (w.routine_id) {
                             setDetailWorkout(w);
                           }
                         }}
