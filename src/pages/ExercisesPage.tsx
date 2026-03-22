@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, Pencil, Tag, X } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Tag, X, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -29,6 +29,9 @@ export default function ExercisesPage() {
   const [newCatName, setNewCatName] = useState("");
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [editingCatName, setEditingCatName] = useState("");
+
+  // Collapsed categories
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
 
   const { data: categories } = useQuery({
     queryKey: ["exercise-categories"],
@@ -99,7 +102,6 @@ export default function ExercisesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
-      queryClient.invalidateQueries({ queryKey: ["exercises-count"] });
       setName(""); setCategoryId(""); setDescription("");
       setOpen(false);
       toast.success("Ejercicio agregado");
@@ -131,7 +133,6 @@ export default function ExercisesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
-      queryClient.invalidateQueries({ queryKey: ["exercises-count"] });
       toast.success("Ejercicio eliminado");
     },
   });
@@ -140,6 +141,65 @@ export default function ExercisesPage() {
     e.name.toLowerCase().includes(search.toLowerCase()) ||
     ((e as any).exercise_categories?.name?.toLowerCase().includes(search.toLowerCase())) ||
     (e.muscle_group?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  // Group by category
+  const grouped: { catId: string | null; catName: string; items: typeof filtered }[] = [];
+  const catMap = new Map<string | null, (typeof filtered)>();
+  
+  filtered?.forEach(ex => {
+    const cid = (ex as any).category_id ?? null;
+    if (!catMap.has(cid)) catMap.set(cid, []);
+    catMap.get(cid)!.push(ex);
+  });
+
+  // Sort: named categories first, then uncategorized
+  categories?.forEach(cat => {
+    if (catMap.has(cat.id)) {
+      grouped.push({ catId: cat.id, catName: cat.name, items: catMap.get(cat.id) });
+      catMap.delete(cat.id);
+    }
+  });
+  if (catMap.has(null)) {
+    grouped.push({ catId: null, catName: "Sin categoría", items: catMap.get(null) });
+    catMap.delete(null);
+  }
+  // Any remaining (orphan category_ids)
+  catMap.forEach((items, cid) => {
+    grouped.push({ catId: cid, catName: "Otra", items });
+  });
+
+  const toggleCat = (catId: string) => {
+    setCollapsedCats(prev => {
+      const next = new Set(prev);
+      next.has(catId) ? next.delete(catId) : next.add(catId);
+      return next;
+    });
+  };
+
+  const renderExercise = (ex: any) => (
+    <div key={ex.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors">
+      <div>
+        <p className="font-medium text-foreground">{ex.name}</p>
+        <div className="flex gap-2 mt-1">
+          {ex.description && <span className="text-xs text-muted-foreground">{ex.description}</span>}
+        </div>
+      </div>
+      <div className="flex gap-1">
+        <Button variant="ghost" size="icon" onClick={() => {
+          setEditId(ex.id);
+          setEditName(ex.name);
+          setEditCategoryId((ex as any).category_id ?? "");
+          setEditDescription(ex.description ?? "");
+          setEditOpen(true);
+        }}>
+          <Pencil className="h-4 w-4 text-muted-foreground" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={() => deleteExercise.mutate(ex.id)}>
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </div>
+    </div>
   );
 
   return (
@@ -189,36 +249,28 @@ export default function ExercisesPage() {
           <p>No hay ejercicios{search ? " que coincidan" : ""}.</p>
         </div>
       ) : (
-        <div className="grid gap-2">
-          {filtered.map(ex => (
-            <div key={ex.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors">
-              <div>
-                <p className="font-medium text-foreground">{ex.name}</p>
-                <div className="flex gap-2 mt-1">
-                  {((ex as any).exercise_categories?.name || ex.muscle_group) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                      {(ex as any).exercise_categories?.name || ex.muscle_group}
-                    </span>
-                  )}
-                  {ex.description && <span className="text-xs text-muted-foreground">{ex.description}</span>}
-                </div>
+        <div className="space-y-4">
+          {grouped.map(group => {
+            const key = group.catId ?? "__none";
+            const isCollapsed = collapsedCats.has(key);
+            return (
+              <div key={key}>
+                <button
+                  onClick={() => toggleCat(key)}
+                  className="flex items-center gap-2 mb-2 text-sm font-bold text-primary uppercase tracking-wider"
+                >
+                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {group.catName}
+                  <span className="text-xs font-normal text-muted-foreground">({group.items?.length ?? 0})</span>
+                </button>
+                {!isCollapsed && (
+                  <div className="grid gap-2 ml-2">
+                    {group.items?.map(renderExercise)}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="icon" onClick={() => {
-                  setEditId(ex.id);
-                  setEditName(ex.name);
-                  setEditCategoryId((ex as any).category_id ?? "");
-                  setEditDescription(ex.description ?? "");
-                  setEditOpen(true);
-                }}>
-                  <Pencil className="h-4 w-4 text-muted-foreground" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => deleteExercise.mutate(ex.id)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

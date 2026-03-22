@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckCircle2, Circle, Dumbbell } from "lucide-react";
+import { CheckCircle2, Circle, Dumbbell, History } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function WorkoutPage() {
   const { user, role } = useAuth();
@@ -57,6 +58,35 @@ export default function WorkoutPage() {
       const { data, error } = await supabase.from("workout_logs").select("*").in("assigned_workout_id", workoutIds);
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Fetch previous session logs
+  const { data: previousLogs } = useQuery({
+    queryKey: ["prev-workout-logs", effectiveClientId, todayWorkouts?.map((w: any) => w.routine_id)],
+    enabled: !!todayWorkouts?.length && !!effectiveClientId,
+    queryFn: async () => {
+      const result: Record<string, any[]> = {};
+      for (const w of todayWorkouts!) {
+        if (!w.routine_id) continue;
+        const { data: prevWorkouts } = await supabase
+          .from("assigned_workouts")
+          .select("id")
+          .eq("client_id", effectiveClientId)
+          .eq("routine_id", w.routine_id)
+          .neq("id", w.id)
+          .lt("workout_date", today)
+          .order("workout_date", { ascending: false })
+          .limit(1);
+        if (prevWorkouts?.length) {
+          const { data: logs } = await supabase
+            .from("workout_logs")
+            .select("*")
+            .eq("assigned_workout_id", prevWorkouts[0].id);
+          result[w.id] = logs ?? [];
+        }
+      }
+      return result;
     },
   });
 
@@ -124,6 +154,7 @@ export default function WorkoutPage() {
       {todayWorkouts?.map((workout: any) => {
         const exercises = workout.routines?.routine_exercises ?? [];
         const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
+        const prevLogs = previousLogs?.[workout.id] ?? [];
 
         return (
           <div key={workout.id} className="space-y-4 mb-6">
@@ -149,6 +180,7 @@ export default function WorkoutPage() {
                       existingLogs={existingLogs?.filter(
                         (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
                       ) ?? []}
+                      prevLogs={prevLogs.filter((l: any) => l.exercise_id === re.exercise_id)}
                       onLogSet={logSet.mutate}
                     />
                   ))}
@@ -163,18 +195,22 @@ export default function WorkoutPage() {
 }
 
 function ExerciseCard({
-  exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, onLogSet
+  exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
 }: {
   exercise: any; sets: number; reps: number; weight: number | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
+  prevLogs: any[];
   onLogSet: (params: any) => void;
 }) {
+  const [showPrev, setShowPrev] = useState(false);
   const [localSets, setLocalSets] = useState<{ reps: string; weightDone: string }[]>(
     Array.from({ length: sets }, (_, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
+      // Pre-fill with previous session data if no current log
+      const prevLog = prevLogs.find((l: any) => l.set_number === i + 1);
       return {
         reps: log?.reps_done?.toString() ?? reps.toString(),
-        weightDone: log?.weight_used?.toString() ?? "",
+        weightDone: log?.weight_used?.toString() ?? prevLog?.weight_used?.toString() ?? "",
       };
     })
   );
@@ -188,13 +224,31 @@ function ExerciseCard({
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+          {prevLogs.length > 0 && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPrev(!showPrev)} title="Ver sesión anterior">
+              <History className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Previous session info */}
+      {showPrev && prevLogs.length > 0 && (
+        <div className="bg-secondary/50 rounded-lg px-3 py-2 mb-3">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Sesión anterior</p>
+          {prevLogs.sort((a, b) => a.set_number - b.set_number).map((l: any) => (
+            <p key={l.id} className="text-[10px] text-muted-foreground">
+              Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}kg
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Header row */}
       <div className="flex items-center gap-3 mb-1 px-0">
         <span className="text-[10px] text-muted-foreground w-12"></span>
-        <span className="text-[10px] text-muted-foreground w-14 text-center">Series</span>
         <span className="text-[10px] text-muted-foreground w-14 text-center">Reps</span>
         <span className="text-[10px] text-muted-foreground w-20 text-center">Planif.</span>
         <span className="text-[10px] text-muted-foreground w-20 text-center">Realiz.</span>
@@ -207,7 +261,6 @@ function ExerciseCard({
           return (
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
-              <span className="text-xs text-foreground w-14 text-center">{sets}</span>
               <Input
                 type="number"
                 className="w-14 h-8 text-sm text-center"
