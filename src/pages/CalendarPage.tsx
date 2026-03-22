@@ -41,7 +41,9 @@ export default function CalendarPage() {
 
   // Bulk assign dialog
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<"client" | "group">("client");
   const [bulkClient, setBulkClient] = useState("");
+  const [bulkGroup, setBulkGroup] = useState("");
   const [bulkRoutine, setBulkRoutine] = useState("");
   const [bulkDays, setBulkDays] = useState<number[]>([]);
   const [bulkWeeks, setBulkWeeks] = useState("4");
@@ -61,6 +63,15 @@ export default function CalendarPage() {
     queryKey: ["groups"],
     queryFn: async () => {
       const { data, error } = await supabase.from("groups").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: groupMembers } = useQuery({
+    queryKey: ["all-group-members"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("group_members").select("*");
       if (error) throw error;
       return data;
     },
@@ -126,16 +137,33 @@ export default function CalendarPage() {
   const bulkAssign = useMutation({
     mutationFn: async () => {
       const weeks = parseInt(bulkWeeks) || 1;
+      // Get client IDs to assign
+      let clientIds: string[] = [];
+      if (bulkMode === "client") {
+        if (!bulkClient) return;
+        clientIds = [bulkClient];
+      } else {
+        if (!bulkGroup) return;
+        const members = groupMembers?.filter(m => m.group_id === bulkGroup) ?? [];
+        clientIds = members.map(m => m.client_id);
+        if (!clientIds.length) {
+          toast.error("El grupo no tiene alumnos");
+          return;
+        }
+      }
+
       const inserts: any[] = [];
-      for (let w = 0; w < weeks; w++) {
-        for (const dayOfWeek of bulkDays) {
-          const weekStart = startOfWeek(addWeeks(currentDate, w), { weekStartsOn: 1 });
-          const date = addDays(weekStart, dayOfWeek);
-          inserts.push({
-            client_id: bulkClient,
-            routine_id: bulkRoutine || null,
-            workout_date: format(date, "yyyy-MM-dd"),
-          });
+      for (const clientId of clientIds) {
+        for (let w = 0; w < weeks; w++) {
+          for (const dayOfWeek of bulkDays) {
+            const weekStart = startOfWeek(addWeeks(currentDate, w), { weekStartsOn: 1 });
+            const date = addDays(weekStart, dayOfWeek);
+            inserts.push({
+              client_id: clientId,
+              routine_id: bulkRoutine || null,
+              workout_date: format(date, "yyyy-MM-dd"),
+            });
+          }
         }
       }
       const { error } = await supabase.from("assigned_workouts").insert(inserts);
@@ -144,7 +172,7 @@ export default function CalendarPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setBulkOpen(false);
-      setBulkDays([]); setBulkClient(""); setBulkRoutine("");
+      setBulkDays([]); setBulkClient(""); setBulkGroup(""); setBulkRoutine("");
       toast.success("Entrenamientos asignados");
     },
   });
@@ -374,7 +402,7 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Workout detail dialog (routine exercises - fully editable) */}
+      {/* Workout detail dialog (routine exercises - editable per-client) */}
       <Dialog open={!!detailWorkout} onOpenChange={() => setDetailWorkout(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -384,12 +412,14 @@ export default function CalendarPage() {
           </DialogHeader>
           {detailWorkout?.routine_id ? (
             <div className="mt-4">
-              <p className="text-xs text-muted-foreground mb-3">Tocá un ejercicio para editar series, reps o peso. Los cambios modifican la rutina base.</p>
+              <p className="text-xs text-muted-foreground mb-3">Los cambios se aplican solo a este alumno, no a la rutina base.</p>
               <RoutineDetailView
                 routineId={detailWorkout.routine_id}
                 routineName={detailWorkout.routines?.name || "Rutina"}
                 totalDays={detailWorkout.routines?.total_days || 1}
                 editable={role === "coach"}
+                assignedWorkoutId={detailWorkout.id}
+                clientId={detailWorkout.client_id}
               />
             </div>
           ) : (
@@ -403,14 +433,46 @@ export default function CalendarPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Planificar Entrenamientos</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-4">
-            <select
-              className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-              value={bulkClient}
-              onChange={e => setBulkClient(e.target.value)}
-            >
-              <option value="">Seleccionar cliente *</option>
-              {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {/* Mode toggle */}
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              <button
+                onClick={() => setBulkMode("client")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  bulkMode === "client" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
+                }`}
+              >
+                Por Alumno
+              </button>
+              <button
+                onClick={() => setBulkMode("group")}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                  bulkMode === "group" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground"
+                }`}
+              >
+                Por Grupo
+              </button>
+            </div>
+
+            {bulkMode === "client" ? (
+              <select
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={bulkClient}
+                onChange={e => setBulkClient(e.target.value)}
+              >
+                <option value="">Seleccionar alumno *</option>
+                {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            ) : (
+              <select
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={bulkGroup}
+                onChange={e => setBulkGroup(e.target.value)}
+              >
+                <option value="">Seleccionar grupo *</option>
+                {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            )}
+
             <select
               className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
               value={bulkRoutine}
@@ -439,7 +501,13 @@ export default function CalendarPage() {
               <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
               <Input type="number" min="1" max="52" value={bulkWeeks} onChange={e => setBulkWeeks(e.target.value)} />
             </div>
-            <Button className="w-full" onClick={() => bulkAssign.mutate()} disabled={!bulkClient || !bulkDays.length}>
+            <Button
+              className="w-full"
+              onClick={() => bulkAssign.mutate()}
+              disabled={
+                (bulkMode === "client" ? !bulkClient : !bulkGroup) || !bulkDays.length
+              }
+            >
               Planificar
             </Button>
           </div>
