@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface RoutineDetailViewProps {
@@ -27,21 +27,21 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
   const [reps, setReps] = useState("10");
   const [weight, setWeight] = useState("");
 
-  // Inline create exercise
   const [createExOpen, setCreateExOpen] = useState(false);
   const [newExName, setNewExName] = useState("");
   const [newExMuscle, setNewExMuscle] = useState("");
 
-  // Inline editing
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSets, setEditSets] = useState("");
   const [editReps, setEditReps] = useState("");
   const [editWeight, setEditWeight] = useState("");
 
-  // Previous session
   const [prevOpen, setPrevOpen] = useState(false);
 
-  const { data: routineExercises } = useQuery({
+  const isOverrideMode = !!assignedWorkoutId;
+
+  // Base routine exercises
+  const { data: baseExercises } = useQuery({
     queryKey: ["routine-exercises", routineId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -56,12 +56,55 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     },
   });
 
-  // Fetch previous session logs for comparison
+  // Override exercises for this assigned workout
+  const { data: overrideExercises } = useQuery({
+    queryKey: ["assigned-workout-exercises", assignedWorkoutId],
+    enabled: isOverrideMode,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assigned_workout_exercises")
+        .select("*, exercises(name, muscle_group)")
+        .eq("assigned_workout_id", assignedWorkoutId!)
+        .order("day_number")
+        .order("block_number")
+        .order("order_index");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Use overrides if they exist, otherwise base
+  const hasOverrides = isOverrideMode && overrideExercises && overrideExercises.length > 0;
+  const routineExercises = hasOverrides ? overrideExercises : baseExercises;
+
+  // Clone base exercises into overrides table (called before any edit in override mode)
+  const ensureOverrides = useCallback(async () => {
+    if (!isOverrideMode || hasOverrides) return;
+    if (!baseExercises?.length) return;
+
+    const rows = baseExercises.map((re: any) => ({
+      assigned_workout_id: assignedWorkoutId!,
+      exercise_id: re.exercise_id,
+      sets: re.sets,
+      reps: re.reps,
+      weight: re.weight,
+      order_index: re.order_index,
+      block_number: re.block_number,
+      day_number: re.day_number,
+      rest_seconds: re.rest_seconds,
+    }));
+
+    const { error } = await supabase.from("assigned_workout_exercises").insert(rows);
+    if (error) throw error;
+
+    await queryClient.invalidateQueries({ queryKey: ["assigned-workout-exercises", assignedWorkoutId] });
+  }, [isOverrideMode, hasOverrides, baseExercises, assignedWorkoutId, queryClient]);
+
+  // Fetch previous session logs
   const { data: previousLogs } = useQuery({
     queryKey: ["previous-logs", clientId, routineId],
     enabled: !!clientId && !!assignedWorkoutId,
     queryFn: async () => {
-      // Find previous assigned_workout for same client + routine before this one
       const { data: prevWorkouts } = await supabase
         .from("assigned_workouts")
         .select("id, workout_date")
@@ -91,13 +134,24 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     enabled: editable,
   });
 
+  const tableName = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+  const invalidateKey = isOverrideMode
+    ? ["assigned-workout-exercises", assignedWorkoutId]
+    : ["routine-exercises", routineId];
+
   const addExercise = useMutation({
     mutationFn: async () => {
-      const dayExercises = routineExercises?.filter(
+      if (isOverrideMode) await ensureOverrides();
+
+      const currentExercises = isOverrideMode
+        ? (await supabase.from("assigned_workout_exercises").select("*").eq("assigned_workout_id", assignedWorkoutId!)).data ?? []
+        : routineExercises ?? [];
+
+      const dayExercises = currentExercises.filter(
         (re: any) => re.day_number === selectedDay && re.block_number === addExBlock
-      ) ?? [];
-      const { error } = await supabase.from("routine_exercises").insert({
-        routine_id: routineId,
+      );
+
+      const insertData: any = {
         exercise_id: selectedExercise,
         sets: parseInt(sets),
         reps: parseInt(reps),
@@ -105,11 +159,20 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
         order_index: dayExercises.length,
         day_number: selectedDay,
         block_number: addExBlock,
-      });
-      if (error) throw error;
+      };
+
+      if (isOverrideMode) {
+        insertData.assigned_workout_id = assignedWorkoutId;
+        const { error } = await supabase.from("assigned_workout_exercises").insert(insertData);
+        if (error) throw error;
+      } else {
+        insertData.routine_id = routineId;
+        const { error } = await supabase.from("routine_exercises").insert(insertData);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["routine-exercises", routineId] });
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
       setSelectedExercise(""); setSets("3"); setReps("10"); setWeight("");
       setAddExOpen(false);
       toast.success("Ejercicio agregado");
@@ -118,21 +181,64 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
 
   const deleteExercise = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("routine_exercises").delete().eq("id", id);
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        // After cloning, we need to find the corresponding override ID
+        const { data } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId!);
+        // The original base ID won't match - we need to delete by finding the cloned record
+        // For simplicity, refetch and let user retry
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return;
+      }
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["routine-exercises", routineId] });
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
     },
   });
 
   const updateExercise = useMutation({
     mutationFn: async ({ id, sets, reps, weight }: { id: string; sets: number; reps: number; weight: number | null }) => {
-      const { error } = await supabase.from("routine_exercises").update({ sets, reps, weight }).eq("id", id);
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        // After cloning, find the new record that matches this exercise
+        const original = routineExercises?.find((re: any) => re.id === id);
+        if (original) {
+          const { data: cloned } = await supabase
+            .from("assigned_workout_exercises")
+            .select("id")
+            .eq("assigned_workout_id", assignedWorkoutId!)
+            .eq("exercise_id", original.exercise_id)
+            .eq("day_number", original.day_number)
+            .eq("block_number", original.block_number)
+            .eq("order_index", original.order_index)
+            .single();
+          if (cloned) {
+            const { error } = await supabase
+              .from("assigned_workout_exercises")
+              .update({ sets, reps, weight })
+              .eq("id", cloned.id);
+            if (error) throw error;
+            return;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return;
+      }
+
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { error } = await supabase.from(table).update({ sets, reps, weight }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["routine-exercises", routineId] });
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
       setEditingId(null);
       toast.success("Actualizado");
     },
@@ -159,7 +265,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
-  // Helper to find previous log for an exercise
   const getPrevLog = (exerciseId: string) => {
     if (!previousLogs?.logs) return null;
     const logs = previousLogs.logs.filter((l: any) => l.exercise_id === exerciseId);
@@ -258,7 +363,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                           </>
                         )}
                       </div>
-                      {/* Show previous session inline */}
                       {prev && !isEditing && (
                         <p className="text-[10px] text-accent-foreground/60 mt-0.5">
                           Anterior: {prev.sets}×{prev.reps} @ {prev.weight}kg
@@ -316,7 +420,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
             </DialogContent>
           </Dialog>
 
-          {/* Inline create exercise dialog */}
           <Dialog open={createExOpen} onOpenChange={setCreateExOpen}>
             <DialogContent>
               <DialogHeader><DialogTitle>Crear Ejercicio Nuevo</DialogTitle></DialogHeader>
@@ -330,7 +433,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
         </>
       )}
 
-      {/* Previous session detail dialog */}
       <Dialog open={prevOpen} onOpenChange={setPrevOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Sesión Anterior — {previousLogs?.date}</DialogTitle></DialogHeader>
@@ -343,7 +445,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   byExercise[l.exercise_id].push(l);
                 });
                 const exerciseNames: Record<string, string> = {};
-                routineExercises?.forEach((re: any) => {
+                (baseExercises ?? []).forEach((re: any) => {
                   if (re.exercises?.name) exerciseNames[re.exercise_id] = re.exercises.name;
                 });
                 return Object.entries(byExercise).map(([exId, logs]) => (
