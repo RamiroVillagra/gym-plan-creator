@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      assigned_workout_exercises: {
+        Row: {
+          assigned_workout_id: string
+          block_number: number
+          created_at: string
+          day_number: number
+          exercise_id: string
+          id: string
+          order_index: number
+          reps: number
+          rest_seconds: number | null
+          sets: number
+          weight: number | null
+        }
+        Insert: {
+          assigned_workout_id: string
+          block_number?: number
+          created_at?: string
+          day_number?: number
+          exercise_id: string
+          id?: string
+          order_index?: number
+          reps?: number
+          rest_seconds?: number | null
+          sets?: number
+          weight?: number | null
+        }
+        Update: {
+          assigned_workout_id?: string
+          block_number?: number
+          created_at?: string
+          day_number?: number
+          exercise_id?: string
+          id?: string
+          order_index?: number
+          reps?: number
+          rest_seconds?: number | null
+          sets?: number
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assigned_workout_exercises_assigned_workout_id_fkey"
+            columns: ["assigned_workout_id"]
+            isOneToOne: false
+            referencedRelation: "assigned_workouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assigned_workout_exercises_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assigned_workouts: {
         Row: {
           client_id: string
