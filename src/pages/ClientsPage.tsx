@@ -42,7 +42,7 @@ export default function ClientsPage() {
   const [viewRoutineId, setViewRoutineId] = useState<string | null>(null);
   const [viewRoutineName, setViewRoutineName] = useState("");
   const [viewRoutineDays, setViewRoutineDays] = useState(1);
-
+  const [viewAssignedWorkoutId, setViewAssignedWorkoutId] = useState<string | null>(null);
   const { data: clients, isLoading } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -274,10 +274,11 @@ export default function ClientsPage() {
                   </div>
                   <div className="flex gap-1">
                     {w.routine_id && (
-                      <Button variant="ghost" size="icon" onClick={() => {
+                     <Button variant="ghost" size="icon" onClick={() => {
                         setViewRoutineId(w.routine_id);
                         setViewRoutineName(w.routines?.name || "Rutina");
                         setViewRoutineDays(w.routines?.total_days || 1);
+                        setViewAssignedWorkoutId(w.id);
                       }}>
                         <Eye className="h-3 w-3 text-primary" />
                       </Button>
@@ -387,6 +388,8 @@ export default function ClientsPage() {
                   routineName={viewRoutineName}
                   totalDays={viewRoutineDays}
                   editable
+                  assignedWorkoutId={viewAssignedWorkoutId ?? undefined}
+                  clientId={selectedClient?.id}
                 />
               </div>
             )}
