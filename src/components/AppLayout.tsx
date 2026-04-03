@@ -29,9 +29,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-background">
       {/* Sidebar - desktop */}
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card p-6 gap-2">
-        <Link to="/" className="flex items-center gap-2 mb-8">
-          <Dumbbell className="h-7 w-7 text-primary" />
-          <span className="font-heading text-xl font-bold text-foreground">TrainPro</span>
+        <Link to="/" className="flex items-center gap-3 mb-8">
+          <img src="/logo.png" alt="Delta App" className="h-8 w-8 object-contain" />
+          <span className="font-heading text-xl font-bold text-foreground">Delta App</span>
         </Link>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
@@ -73,8 +73,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-card border-b border-border px-4 h-14">
         <Link to="/" className="flex items-center gap-2">
-          <Dumbbell className="h-6 w-6 text-primary" />
-          <span className="font-heading text-lg font-bold">TrainPro</span>
+          <img src="/logo.png" alt="Delta App" className="h-7 w-7 object-contain" />
+          <span className="font-heading text-lg font-bold">Delta App</span>
         </Link>
         <button onClick={() => setMobileOpen(!mobileOpen)} className="text-foreground">
           {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
