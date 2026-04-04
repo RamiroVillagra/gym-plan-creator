@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X } from "lucide-react";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function KioskPage() {
   const queryClient = useQueryClient();
@@ -16,12 +17,19 @@ export default function KioskPage() {
   const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const [managingOpen, setManagingOpen] = useState(false);
   const today = format(new Date(), "yyyy-MM-dd");
 
-  const { data: groups } = useQuery({
-    queryKey: ["groups"],
+  // --- Gestión de grupos de kiosco ---
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDesc, setNewGroupDesc] = useState("");
+  const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState("");
+
+  const { data: kioskGroups } = useQuery({
+    queryKey: ["kiosk-groups"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("groups").select("*").order("name");
+      const { data, error } = await supabase.from("kiosk_groups").select("*").order("name");
       if (error) throw error;
       return data;
     },
@@ -41,9 +49,22 @@ export default function KioskPage() {
     enabled: !!selectedGroup,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("group_members")
+        .from("kiosk_group_members")
         .select("*, clients(id, name)")
-        .eq("group_id", selectedGroup);
+        .eq("kiosk_group_id", selectedGroup);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: managingGroupMembers } = useQuery({
+    queryKey: ["kiosk-managing-members", managingGroupId],
+    enabled: !!managingGroupId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("kiosk_group_members")
+        .select("*, clients(id, name)")
+        .eq("kiosk_group_id", managingGroupId!);
       if (error) throw error;
       return data;
     },
@@ -74,6 +95,62 @@ export default function KioskPage() {
     },
   });
 
+  const createGroup = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("kiosk_groups").insert({
+        name: newGroupName,
+        description: newGroupDesc || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-groups"] });
+      setNewGroupName("");
+      setNewGroupDesc("");
+      toast.success("Turno creado");
+    },
+    onError: () => toast.error("Error al crear turno"),
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("kiosk_groups").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-groups"] });
+      if (managingGroupId) setManagingGroupId(null);
+      toast.success("Turno eliminado");
+    },
+  });
+
+  const addMember = useMutation({
+    mutationFn: async (clientId: string) => {
+      const { error } = await supabase.from("kiosk_group_members").insert({
+        kiosk_group_id: managingGroupId,
+        client_id: clientId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-managing-members", managingGroupId] });
+      setMemberSearch("");
+      toast.success("Alumno agregado al turno");
+    },
+    onError: () => toast.error("Error (¿ya está en el turno?)"),
+  });
+
+  const removeMember = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("kiosk_group_members").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-managing-members", managingGroupId] });
+      toast.success("Alumno removido del turno");
+    },
+  });
+
   const logSet = useMutation({
     mutationFn: async (params: {
       assigned_workout_id: string; exercise_id: string;
@@ -100,7 +177,6 @@ export default function KioskPage() {
     },
   });
 
-  // Combine group members + manual clients
   const groupClientIds = groupMembers?.map((m: any) => m.clients.id) ?? [];
   const allKioskClients = [
     ...(groupMembers?.map((m: any) => ({ id: m.clients.id, name: m.clients.name })) ?? []),
@@ -112,6 +188,13 @@ export default function KioskPage() {
     !allKioskClients.some(k => k.id === c.id)
   ) ?? [];
 
+  const managingMemberIds = managingGroupMembers?.map((m: any) => m.client_id) ?? [];
+  const filteredMemberSearch = allClients?.filter(c =>
+    c.name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+    !managingMemberIds.includes(c.id)
+  ) ?? [];
+
+  // --- Vista de entrenamiento del alumno ---
   if (selectedClient) {
     return (
       <div className="max-w-2xl mx-auto">
@@ -138,7 +221,6 @@ export default function KioskPage() {
           todayWorkouts.map((workout: any) => {
             const exercises = workout.routines?.routine_exercises ?? [];
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
-
             return (
               <div key={workout.id} className="space-y-4 mb-6">
                 {workout.routines?.name && (
@@ -177,23 +259,29 @@ export default function KioskPage() {
     );
   }
 
+  // --- Vista principal del kiosco ---
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-2 mb-8">
-        <Dumbbell className="h-8 w-8 text-primary" />
-        <span className="font-heading text-2xl font-bold">Modo Kiosco</span>
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-2">
+          <Dumbbell className="h-8 w-8 text-primary" />
+          <span className="font-heading text-2xl font-bold">Modo Kiosco</span>
+        </div>
+        <Button variant="outline" onClick={() => setManagingOpen(true)}>
+          <Settings className="h-4 w-4 mr-2" />Gestionar Turnos
+        </Button>
       </div>
 
       <div className="flex gap-4 mb-8 flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno/grupo:</label>
+          <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno:</label>
           <select
             className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
             value={selectedGroup}
             onChange={e => setSelectedGroup(e.target.value)}
           >
-            <option value="">Elegir grupo</option>
-            {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            <option value="">Elegir turno</option>
+            {kioskGroups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </div>
         <div className="flex items-end">
@@ -258,10 +346,122 @@ export default function KioskPage() {
             ))}
           </div>
           {allKioskClients.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">Este grupo no tiene alumnos.</p>
+            <p className="text-center text-muted-foreground py-8">Este turno no tiene alumnos.</p>
           )}
         </>
       )}
+
+      {/* Dialog para gestionar turnos */}
+      <Dialog open={managingOpen} onOpenChange={setManagingOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Gestionar Turnos de Kiosco</DialogTitle>
+          </DialogHeader>
+
+          {/* Crear nuevo turno */}
+          <div className="bg-secondary/30 rounded-lg p-4 mt-2">
+            <p className="text-sm font-medium text-foreground mb-3">Nuevo turno</p>
+            <div className="space-y-2">
+              <Input
+                placeholder="Nombre del turno (ej: Lunes 8hs) *"
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+              />
+              <Input
+                placeholder="Descripción (opcional)"
+                value={newGroupDesc}
+                onChange={e => setNewGroupDesc(e.target.value)}
+              />
+              <Button
+                className="w-full"
+                onClick={() => createGroup.mutate()}
+                disabled={!newGroupName.trim()}
+              >
+                <Plus className="h-4 w-4 mr-2" />Crear Turno
+              </Button>
+            </div>
+          </div>
+
+          {/* Lista de turnos */}
+          <div className="mt-4 space-y-2">
+            {!kioskGroups?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No hay turnos creados.</p>
+            ) : (
+              kioskGroups.map(g => (
+                <div key={g.id} className="border border-border rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 bg-card">
+                    <p className="font-medium text-sm text-foreground">{g.name}</p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setManagingGroupId(managingGroupId === g.id ? null : g.id)}
+                      >
+                        {managingGroupId === g.id ? "Cerrar" : "Alumnos"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteGroup.mutate(g.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Panel de alumnos del turno */}
+                  {managingGroupId === g.id && (
+                    <div className="px-4 py-3 bg-secondary/20 border-t border-border">
+                      {/* Alumnos actuales */}
+                      {managingGroupMembers?.length ? (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {managingGroupMembers.map((m: any) => (
+                            <span key={m.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+                              {m.clients?.name}
+                              <button onClick={() => removeMember.mutate(m.id)}>
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mb-3">Sin alumnos en este turno.</p>
+                      )}
+
+                      {/* Buscar y agregar alumnos */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar alumno para agregar..."
+                          className="pl-8 h-8 text-xs"
+                          value={memberSearch}
+                          onChange={e => setMemberSearch(e.target.value)}
+                        />
+                      </div>
+                      {memberSearch && (
+                        <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                          {filteredMemberSearch.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => addMember.mutate(c.id)}
+                              className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-secondary text-xs text-foreground"
+                            >
+                              + {c.name}
+                            </button>
+                          ))}
+                          {!filteredMemberSearch.length && (
+                            <p className="text-xs text-muted-foreground px-3">Sin resultados.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -317,3 +517,4 @@ function KioskExerciseCard({
     </div>
   );
 }
+
