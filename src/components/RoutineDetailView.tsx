@@ -12,7 +12,6 @@ interface RoutineDetailViewProps {
   routineName: string;
   totalDays: number;
   editable?: boolean;
-  /** When provided, edits clone into per-client overrides instead of modifying base routine */
   assignedWorkoutId?: string;
   clientId?: string;
 }
@@ -27,6 +26,10 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
   const [reps, setReps] = useState("10");
   const [weight, setWeight] = useState("");
 
+  // Filtros del buscador
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
+
   const [createExOpen, setCreateExOpen] = useState(false);
   const [newExName, setNewExName] = useState("");
   const [newExMuscle, setNewExMuscle] = useState("");
@@ -40,7 +43,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
 
   const isOverrideMode = !!assignedWorkoutId;
 
-  // Base routine exercises
   const { data: baseExercises } = useQuery({
     queryKey: ["routine-exercises", routineId],
     queryFn: async () => {
@@ -56,7 +58,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     },
   });
 
-  // Override exercises for this assigned workout
   const { data: overrideExercises } = useQuery({
     queryKey: ["assigned-workout-exercises", assignedWorkoutId],
     enabled: isOverrideMode,
@@ -73,11 +74,9 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     },
   });
 
-  // Use overrides if they exist, otherwise base
   const hasOverrides = isOverrideMode && overrideExercises && overrideExercises.length > 0;
   const routineExercises = hasOverrides ? overrideExercises : baseExercises;
 
-  // Clone base exercises into overrides table (called before any edit in override mode)
   const ensureOverrides = useCallback(async () => {
     if (!isOverrideMode || hasOverrides) return;
     if (!baseExercises?.length) return;
@@ -100,7 +99,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     await queryClient.invalidateQueries({ queryKey: ["assigned-workout-exercises", assignedWorkoutId] });
   }, [isOverrideMode, hasOverrides, baseExercises, assignedWorkoutId, queryClient]);
 
-  // Fetch previous session logs
   const { data: previousLogs } = useQuery({
     queryKey: ["previous-logs", clientId, routineId],
     enabled: !!clientId && !!assignedWorkoutId,
@@ -127,17 +125,40 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
   const { data: exercises } = useQuery({
     queryKey: ["exercises"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("exercises").select("*").order("name");
+      const { data, error } = await supabase
+        .from("exercises")
+        .select("*, exercise_categories(name)")
+        .order("name");
       if (error) throw error;
       return data;
     },
     enabled: editable,
   });
 
-  const tableName = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+  const { data: categories } = useQuery({
+    queryKey: ["exercise-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("exercise_categories").select("*").order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: editable,
+  });
+
   const invalidateKey = isOverrideMode
     ? ["assigned-workout-exercises", assignedWorkoutId]
     : ["routine-exercises", routineId];
+
+  // Filtrar ejercicios por categoría y búsqueda
+  const filteredExercises = exercises?.filter(ex => {
+    const matchCategory = filterCategory
+      ? (ex as any).category_id === filterCategory
+      : true;
+    const matchSearch = filterSearch
+      ? ex.name.toLowerCase().includes(filterSearch.toLowerCase())
+      : true;
+    return matchCategory && matchSearch;
+  }) ?? [];
 
   const addExercise = useMutation({
     mutationFn: async () => {
@@ -173,7 +194,9 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
-      setSelectedExercise(""); setSets("3"); setReps("10"); setWeight("");
+      setSelectedExercise("");
+      setSets("3"); setReps("10"); setWeight("");
+      setFilterCategory(""); setFilterSearch("");
       setAddExOpen(false);
       toast.success("Ejercicio agregado");
     },
@@ -183,13 +206,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     mutationFn: async (id: string) => {
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
-        // After cloning, we need to find the corresponding override ID
-        const { data } = await supabase
-          .from("assigned_workout_exercises")
-          .select("id")
-          .eq("assigned_workout_id", assignedWorkoutId!);
-        // The original base ID won't match - we need to delete by finding the cloned record
-        // For simplicity, refetch and let user retry
         queryClient.invalidateQueries({ queryKey: invalidateKey });
         toast.info("Datos clonados. Intentá de nuevo.");
         return;
@@ -207,7 +223,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
     mutationFn: async ({ id, sets, reps, weight }: { id: string; sets: number; reps: number; weight: number | null }) => {
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
-        // After cloning, find the new record that matches this exercise
         const original = routineExercises?.find((re: any) => re.id === id);
         if (original) {
           const { data: cloned } = await supabase
@@ -387,34 +402,87 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
             <Plus className="h-3 w-3 mr-1" />Agregar Ejercicio
           </Button>
 
-          <Dialog open={addExOpen} onOpenChange={setAddExOpen}>
+          <Dialog open={addExOpen} onOpenChange={(open) => {
+            setAddExOpen(open);
+            if (!open) {
+              setFilterCategory("");
+              setFilterSearch("");
+              setSelectedExercise("");
+            }
+          }}>
             <DialogContent>
               <DialogHeader><DialogTitle>Agregar Ejercicio - Día {selectedDay}</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
-                <div className="flex gap-2">
+
+                {/* 1. Filtro por categoría */}
+                <div>
+                  <label className="text-xs text-muted-foreground">Categoría</label>
                   <select
-                    className="flex-1 h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                    value={selectedExercise}
-                    onChange={e => setSelectedExercise(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground mt-1"
+                    value={filterCategory}
+                    onChange={e => {
+                      setFilterCategory(e.target.value);
+                      setSelectedExercise("");
+                      setFilterSearch("");
+                    }}
                   >
-                    <option value="">Seleccionar ejercicio</option>
-                    {exercises?.map(ex => (
-                      <option key={ex.id} value={ex.id}>{ex.name} {ex.muscle_group ? `(${ex.muscle_group})` : ""}</option>
+                    <option value="">Todas las categorías</option>
+                    {categories?.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
-                  <Button variant="outline" size="icon" onClick={() => setCreateExOpen(true)} title="Crear ejercicio nuevo">
-                    <PlusCircle className="h-4 w-4" />
-                  </Button>
                 </div>
+
+                {/* 2. Buscador de ejercicios */}
+                <div>
+                  <label className="text-xs text-muted-foreground">Buscar ejercicio</label>
+                  <Input
+                    className="mt-1"
+                    placeholder="Escribí el nombre..."
+                    value={filterSearch}
+                    onChange={e => {
+                      setFilterSearch(e.target.value);
+                      setSelectedExercise("");
+                    }}
+                  />
+                </div>
+
+                {/* 3. Lista filtrada */}
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    Seleccionar ejercicio {filteredExercises.length > 0 ? `(${filteredExercises.length})` : ""}
+                  </label>
+                  <div className="flex gap-2 mt-1">
+                    <select
+                      className="flex-1 h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                      value={selectedExercise}
+                      onChange={e => setSelectedExercise(e.target.value)}
+                    >
+                      <option value="">— Seleccioná —</option>
+                      {filteredExercises.map(ex => (
+                        <option key={ex.id} value={ex.id}>{ex.name}</option>
+                      ))}
+                    </select>
+                    <Button variant="outline" size="icon" onClick={() => setCreateExOpen(true)} title="Crear ejercicio nuevo">
+                      <PlusCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {filteredExercises.length === 0 && (filterCategory || filterSearch) && (
+                    <p className="text-xs text-muted-foreground mt-1">Sin resultados. Probá con otro filtro.</p>
+                  )}
+                </div>
+
                 <div>
                   <label className="text-xs text-muted-foreground">Bloque</label>
                   <Input type="number" min="1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
                 </div>
+
                 <div className="grid grid-cols-3 gap-3">
                   <div><label className="text-xs text-muted-foreground">Series</label><Input type="number" value={sets} onChange={e => setSets(e.target.value)} min="1" /></div>
                   <div><label className="text-xs text-muted-foreground">Reps</label><Input type="number" value={reps} onChange={e => setReps(e.target.value)} min="1" /></div>
                   <div><label className="text-xs text-muted-foreground">Peso (kg)</label><Input type="number" value={weight} onChange={e => setWeight(e.target.value)} min="0" step="0.5" /></div>
                 </div>
+
                 <Button className="w-full" onClick={() => addExercise.mutate()} disabled={!selectedExercise}>Agregar</Button>
               </div>
             </DialogContent>
