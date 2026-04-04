@@ -21,7 +21,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
   const [selectedDay, setSelectedDay] = useState(1);
   const [addExOpen, setAddExOpen] = useState(false);
   const [addExBlock, setAddExBlock] = useState(1);
-  const [selectedExercise, setSelectedExercise] = useState("");
+  const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
   const [sets, setSets] = useState("3");
   const [reps, setReps] = useState("10");
   const [weight, setWeight] = useState("");
@@ -172,33 +172,36 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
         (re: any) => re.day_number === selectedDay && re.block_number === addExBlock
       );
 
-      const insertData: any = {
-        exercise_id: selectedExercise,
-        sets: parseInt(sets),
-        reps: parseInt(reps),
-        weight: weight ? parseFloat(weight) : null,
-        order_index: dayExercises.length,
-        day_number: selectedDay,
-        block_number: addExBlock,
-      };
+      const exerciseIds = Array.from(selectedExercises);
+      const rows = exerciseIds.map((exId, i) => {
+        const base: any = {
+          exercise_id: exId,
+          sets: parseInt(sets),
+          reps: parseInt(reps),
+          weight: weight ? parseFloat(weight) : null,
+          order_index: dayExercises.length + i,
+          day_number: selectedDay,
+          block_number: addExBlock,
+        };
+        if (isOverrideMode) {
+          base.assigned_workout_id = assignedWorkoutId;
+        } else {
+          base.routine_id = routineId;
+        }
+        return base;
+      });
 
-      if (isOverrideMode) {
-        insertData.assigned_workout_id = assignedWorkoutId;
-        const { error } = await supabase.from("assigned_workout_exercises").insert(insertData);
-        if (error) throw error;
-      } else {
-        insertData.routine_id = routineId;
-        const { error } = await supabase.from("routine_exercises").insert(insertData);
-        if (error) throw error;
-      }
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { error } = await supabase.from(table).insert(rows);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
-      setSelectedExercise("");
+      setSelectedExercises(new Set());
       setSets("3"); setReps("10"); setWeight("");
       setFilterCategory(""); setFilterSearch("");
       setAddExOpen(false);
-      toast.success("Ejercicio agregado");
+      toast.success(`${selectedExercises.size} ejercicio${selectedExercises.size > 1 ? "s" : ""} agregado${selectedExercises.size > 1 ? "s" : ""}`);
     },
   });
 
@@ -407,7 +410,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
             if (!open) {
               setFilterCategory("");
               setFilterSearch("");
-              setSelectedExercise("");
+              setSelectedExercises(new Set());
             }
           }}>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -422,7 +425,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                     value={filterCategory}
                     onChange={e => {
                       setFilterCategory(e.target.value);
-                      setSelectedExercise("");
+                      setSelectedExercises(new Set());
                       setFilterSearch("");
                     }}
                   >
@@ -433,59 +436,64 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   </select>
                 </div>
 
-                {/* 2. Lista con buscador integrado */}
+                {/* Bloque */}
+                <div>
+                  <label className="text-xs text-muted-foreground">¿En qué bloque van estos ejercicios?</label>
+                  <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
+                </div>
+
+                {/* 2. Lista con buscador integrado y selección múltiple */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs text-muted-foreground">Ejercicio</label>
+                    <label className="text-xs text-muted-foreground">
+                      Ejercicios {selectedExercises.size > 0 && (
+                        <span className="text-primary font-medium">({selectedExercises.size} seleccionados)</span>
+                      )}
+                    </label>
                     <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setCreateExOpen(true)}>
                       <PlusCircle className="h-3 w-3 mr-1" />Nuevo
                     </Button>
                   </div>
                   <div className="border border-input rounded-lg overflow-hidden">
-                    {/* Buscador dentro de la lista */}
                     <div className="border-b border-input px-3 py-2">
                       <Input
                         className="h-7 text-xs border-0 p-0 focus-visible:ring-0 bg-transparent"
                         placeholder="Buscar..."
                         value={filterSearch}
-                        onChange={e => {
-                          setFilterSearch(e.target.value);
-                          setSelectedExercise("");
-                        }}
+                        onChange={e => setFilterSearch(e.target.value)}
                       />
                     </div>
-                    {/* Lista de ejercicios filtrada */}
                     <div className="max-h-32 overflow-y-auto">
                       {filteredExercises.length === 0 ? (
                         <p className="text-xs text-muted-foreground px-3 py-3 text-center">Sin resultados.</p>
                       ) : (
-                        filteredExercises.map(ex => (
-                          <button
-                            key={ex.id}
-                            type="button"
-                            onClick={() => setSelectedExercise(ex.id)}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                              selectedExercise === ex.id
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-secondary text-foreground"
-                            }`}
-                          >
-                            {ex.name}
-                          </button>
-                        ))
+                        filteredExercises.map(ex => {
+                          const isSelected = selectedExercises.has(ex.id);
+                          return (
+                            <button
+                              key={ex.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedExercises(prev => {
+                                  const next = new Set(prev);
+                                  next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id);
+                                  return next;
+                                });
+                              }}
+                              className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                                isSelected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "hover:bg-secondary text-foreground"
+                              }`}
+                            >
+                              <span>{ex.name}</span>
+                              {isSelected && <span className="text-xs">✓</span>}
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   </div>
-                  {selectedExercise && (
-                    <p className="text-xs text-primary mt-1">
-                      ✓ {filteredExercises.find(e => e.id === selectedExercise)?.name}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground">Bloque</label>
-                  <Input type="number" min="1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -494,7 +502,13 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   <div><label className="text-xs text-muted-foreground">Peso (kg)</label><Input type="number" value={weight} onChange={e => setWeight(e.target.value)} min="0" step="0.5" /></div>
                 </div>
 
-                <Button className="w-full" onClick={() => addExercise.mutate()} disabled={!selectedExercise}>Agregar</Button>
+                <Button
+                  className="w-full"
+                  onClick={() => addExercise.mutate()}
+                  disabled={selectedExercises.size === 0}
+                >
+                  Agregar {selectedExercises.size > 0 ? `${selectedExercises.size} ejercicio${selectedExercises.size > 1 ? "s" : ""}` : ""}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
