@@ -410,7 +410,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
               setSelectedExercise("");
             }
           }}>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Agregar Ejercicio - Día {selectedDay}</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
 
@@ -455,7 +455,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                       />
                     </div>
                     {/* Lista de ejercicios filtrada */}
-                    <div className="max-h-40 overflow-y-auto">
+                    <div className="max-h-32 overflow-y-auto">
                       {filteredExercises.length === 0 ? (
                         <p className="text-xs text-muted-foreground px-3 py-3 text-center">Sin resultados.</p>
                       ) : (
