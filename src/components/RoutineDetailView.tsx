@@ -176,9 +176,9 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
       const rows = exerciseIds.map((exId, i) => {
         const base: any = {
           exercise_id: exId,
-          sets: parseInt(sets),
-          reps: parseInt(reps),
-          weight: weight ? parseFloat(weight) : null,
+          sets: null,
+          reps: null,
+          weight: null,
           order_index: dayExercises.length + i,
           day_number: selectedDay,
           block_number: addExBlock,
@@ -414,10 +414,16 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
             }
           }}>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Agregar Ejercicio - Día {selectedDay}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Agregar Ejercicios - Día {selectedDay}</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
 
-                {/* 1. Filtro por categoría */}
+                {/* 1. Bloque */}
+                <div>
+                  <label className="text-xs text-muted-foreground">Bloque</label>
+                  <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
+                </div>
+
+                {/* 2. Categoría */}
                 <div>
                   <label className="text-xs text-muted-foreground">Categoría</label>
                   <select
@@ -425,7 +431,6 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                     value={filterCategory}
                     onChange={e => {
                       setFilterCategory(e.target.value);
-                      setSelectedExercises(new Set());
                       setFilterSearch("");
                     }}
                   >
@@ -436,20 +441,10 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   </select>
                 </div>
 
-                {/* Bloque */}
-                <div>
-                  <label className="text-xs text-muted-foreground">¿En qué bloque van estos ejercicios?</label>
-                  <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
-                </div>
-
-                {/* 2. Lista con buscador integrado y selección múltiple */}
+                {/* 3. Lista de ejercicios con selección múltiple */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs text-muted-foreground">
-                      Ejercicios {selectedExercises.size > 0 && (
-                        <span className="text-primary font-medium">({selectedExercises.size} seleccionados)</span>
-                      )}
-                    </label>
+                    <label className="text-xs text-muted-foreground">Ejercicios</label>
                     <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setCreateExOpen(true)}>
                       <PlusCircle className="h-3 w-3 mr-1" />Nuevo
                     </Button>
@@ -496,11 +491,27 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div><label className="text-xs text-muted-foreground">Series</label><Input type="number" value={sets} onChange={e => setSets(e.target.value)} min="1" /></div>
-                  <div><label className="text-xs text-muted-foreground">Reps</label><Input type="number" value={reps} onChange={e => setReps(e.target.value)} min="1" /></div>
-                  <div><label className="text-xs text-muted-foreground">Peso (kg)</label><Input type="number" value={weight} onChange={e => setWeight(e.target.value)} min="0" step="0.5" /></div>
-                </div>
+                {/* 4. Seleccionados (memoria entre categorías) */}
+                {selectedExercises.size > 0 && (
+                  <div className="bg-secondary/30 rounded-lg px-3 py-2">
+                    <p className="text-xs text-muted-foreground mb-2">Seleccionados ({selectedExercises.size}):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from(selectedExercises).map(id => {
+                        const ex = exercises?.find(e => e.id === id);
+                        return ex ? (
+                          <span key={id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+                            {ex.name}
+                            <button onClick={() => setSelectedExercises(prev => {
+                              const next = new Set(prev);
+                              next.delete(id);
+                              return next;
+                            })}>✕</button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <Button
                   className="w-full"
