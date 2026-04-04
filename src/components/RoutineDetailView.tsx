@@ -420,7 +420,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                 {/* 1. Bloque */}
                 <div>
                   <label className="text-xs text-muted-foreground">Bloque</label>
-                  <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(parseInt(e.target.value) || 1)} />
+                  <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(e.target.value === "" ? 1 : parseInt(e.target.value) || 1)} onFocus={e => e.target.select()} />
                 </div>
 
                 {/* 2. Categoría */}
