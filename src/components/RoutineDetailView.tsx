@@ -433,42 +433,53 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
                   </select>
                 </div>
 
-                {/* 2. Buscador de ejercicios */}
+                {/* 2. Lista con buscador integrado */}
                 <div>
-                  <label className="text-xs text-muted-foreground">Buscar ejercicio</label>
-                  <Input
-                    className="mt-1"
-                    placeholder="Escribí el nombre..."
-                    value={filterSearch}
-                    onChange={e => {
-                      setFilterSearch(e.target.value);
-                      setSelectedExercise("");
-                    }}
-                  />
-                </div>
-
-                {/* 3. Lista filtrada */}
-                <div>
-                  <label className="text-xs text-muted-foreground">
-                    Seleccionar ejercicio {filteredExercises.length > 0 ? `(${filteredExercises.length})` : ""}
-                  </label>
-                  <div className="flex gap-2 mt-1">
-                    <select
-                      className="flex-1 h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                      value={selectedExercise}
-                      onChange={e => setSelectedExercise(e.target.value)}
-                    >
-                      <option value="">— Seleccioná —</option>
-                      {filteredExercises.map(ex => (
-                        <option key={ex.id} value={ex.id}>{ex.name}</option>
-                      ))}
-                    </select>
-                    <Button variant="outline" size="icon" onClick={() => setCreateExOpen(true)} title="Crear ejercicio nuevo">
-                      <PlusCircle className="h-4 w-4" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs text-muted-foreground">Ejercicio</label>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setCreateExOpen(true)}>
+                      <PlusCircle className="h-3 w-3 mr-1" />Nuevo
                     </Button>
                   </div>
-                  {filteredExercises.length === 0 && (filterCategory || filterSearch) && (
-                    <p className="text-xs text-muted-foreground mt-1">Sin resultados. Probá con otro filtro.</p>
+                  <div className="border border-input rounded-lg overflow-hidden">
+                    {/* Buscador dentro de la lista */}
+                    <div className="border-b border-input px-3 py-2">
+                      <Input
+                        className="h-7 text-xs border-0 p-0 focus-visible:ring-0 bg-transparent"
+                        placeholder="Buscar..."
+                        value={filterSearch}
+                        onChange={e => {
+                          setFilterSearch(e.target.value);
+                          setSelectedExercise("");
+                        }}
+                      />
+                    </div>
+                    {/* Lista de ejercicios filtrada */}
+                    <div className="max-h-40 overflow-y-auto">
+                      {filteredExercises.length === 0 ? (
+                        <p className="text-xs text-muted-foreground px-3 py-3 text-center">Sin resultados.</p>
+                      ) : (
+                        filteredExercises.map(ex => (
+                          <button
+                            key={ex.id}
+                            type="button"
+                            onClick={() => setSelectedExercise(ex.id)}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                              selectedExercise === ex.id
+                                ? "bg-primary text-primary-foreground"
+                                : "hover:bg-secondary text-foreground"
+                            }`}
+                          >
+                            {ex.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  {selectedExercise && (
+                    <p className="text-xs text-primary mt-1">
+                      ✓ {filteredExercises.find(e => e.id === selectedExercise)?.name}
+                    </p>
                   )}
                 </div>
 
