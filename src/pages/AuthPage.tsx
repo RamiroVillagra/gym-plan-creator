@@ -2,7 +2,6 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AuthPage() {
@@ -43,9 +42,9 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <Dumbbell className="h-8 w-8 text-primary" />
-          <span className="font-heading text-2xl font-bold text-foreground">TrainPro</span>
+        <div className="flex items-center justify-center gap-3 mb-8">
+          <img src="/logo.png" alt="Delta App" className="h-10 w-10 object-contain" />
+          <span className="font-heading text-2xl font-bold text-foreground">Delta App</span>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6">
