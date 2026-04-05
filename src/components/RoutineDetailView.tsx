@@ -8,7 +8,7 @@ import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface RoutineDetailViewProps {
-  routineId: string;
+  routineId?: string;
   routineName: string;
   totalDays: number;
   editable?: boolean;
@@ -16,7 +16,7 @@ interface RoutineDetailViewProps {
   clientId?: string;
 }
 
-export default function RoutineDetailView({ routineId, routineName, totalDays, editable = false, assignedWorkoutId, clientId }: RoutineDetailViewProps) {
+export default function RoutineDetailView({ routineId = "", routineName, totalDays, editable = false, assignedWorkoutId, clientId }: RoutineDetailViewProps) {
   const queryClient = useQueryClient();
   const [selectedDay, setSelectedDay] = useState(1);
   const [addExOpen, setAddExOpen] = useState(false);
@@ -45,6 +45,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
 
   const { data: baseExercises } = useQuery({
     queryKey: ["routine-exercises", routineId],
+    enabled: !!routineId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("routine_exercises")
@@ -79,7 +80,7 @@ export default function RoutineDetailView({ routineId, routineName, totalDays, e
 
   const ensureOverrides = useCallback(async () => {
     if (!isOverrideMode || hasOverrides) return;
-    if (!baseExercises?.length) return;
+    if (!routineId || !baseExercises?.length) return;
 
     const rows = baseExercises.map((re: any) => ({
       assigned_workout_id: assignedWorkoutId!,
