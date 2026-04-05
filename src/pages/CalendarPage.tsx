@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -36,8 +36,13 @@ export default function CalendarPage() {
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [editWorkoutRoutine, setEditWorkoutRoutine] = useState("");
 
-  // Workout detail dialog (view exercises)
+  // Workout detail dialog
   const [detailWorkout, setDetailWorkout] = useState<any>(null);
+
+  // Copy dialog
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyDays, setCopyDays] = useState<number[]>([]);
+  const [copyWeeks, setCopyWeeks] = useState("1");
 
   // Bulk assign dialog
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -134,10 +139,79 @@ export default function CalendarPage() {
     },
   });
 
+  const copyWorkout = useMutation({
+    mutationFn: async () => {
+      if (!detailWorkout || !copyDays.length) return;
+      const weeks = parseInt(copyWeeks) || 1;
+
+      // Obtener ejercicios del workout original
+      const { data: originalExercises } = await supabase
+        .from("assigned_workout_exercises")
+        .select("*")
+        .eq("assigned_workout_id", detailWorkout.id);
+
+      // Si no tiene ejercicios propios, buscar los de la rutina base
+      const { data: baseExercises } = detailWorkout.routine_id
+        ? await supabase
+            .from("routine_exercises")
+            .select("*")
+            .eq("routine_id", detailWorkout.routine_id)
+        : { data: [] };
+
+      const exercisesToCopy = (originalExercises?.length ? originalExercises : baseExercises) ?? [];
+
+      const inserts: any[] = [];
+      const workoutDate = new Date(detailWorkout.workout_date + "T12:00:00");
+
+      for (let w = 0; w < weeks; w++) {
+        for (const dayOfWeek of copyDays) {
+          const weekStart = startOfWeek(addWeeks(workoutDate, w + 1), { weekStartsOn: 1 });
+          const date = addDays(weekStart, dayOfWeek);
+          inserts.push({
+            client_id: detailWorkout.client_id,
+            routine_id: detailWorkout.routine_id || null,
+            workout_date: format(date, "yyyy-MM-dd"),
+          });
+        }
+      }
+
+      // Crear los nuevos workouts
+      const { data: newWorkouts, error } = await supabase
+        .from("assigned_workouts")
+        .insert(inserts)
+        .select();
+      if (error) throw error;
+
+      // Copiar ejercicios a cada nuevo workout
+      if (exercisesToCopy.length && newWorkouts?.length) {
+        const exerciseInserts = newWorkouts.flatMap(nw =>
+          exercisesToCopy.map((ex: any) => ({
+            assigned_workout_id: nw.id,
+            exercise_id: ex.exercise_id,
+            sets: ex.sets,
+            reps: ex.reps,
+            weight: ex.weight,
+            order_index: ex.order_index,
+            block_number: ex.block_number,
+            day_number: ex.day_number,
+            rest_seconds: ex.rest_seconds,
+          }))
+        );
+        await supabase.from("assigned_workout_exercises").insert(exerciseInserts);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setCopyOpen(false);
+      setCopyDays([]); setCopyWeeks("1");
+      toast.success("Entrenamiento copiado");
+    },
+    onError: () => toast.error("Error al copiar"),
+  });
+
   const bulkAssign = useMutation({
     mutationFn: async () => {
       const weeks = parseInt(bulkWeeks) || 1;
-      // Get client IDs to assign
       let clientIds: string[] = [];
       if (bulkMode === "client") {
         if (!bulkClient) return;
@@ -196,6 +270,7 @@ export default function CalendarPage() {
 
   const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   const toggleBulkDay = (d: number) => setBulkDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  const toggleCopyDay = (d: number) => setCopyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
 
   const isClientFiltered = !!filterClient;
 
@@ -309,14 +384,12 @@ export default function CalendarPage() {
                         className="bg-secondary/50 rounded px-1.5 py-0.5 flex items-center justify-between group text-[10px] cursor-pointer"
                         onClick={e => {
                           e.stopPropagation();
-                          if (w.routine_id) {
-                            setDetailWorkout(w);
-                          }
+                          setDetailWorkout(w);
                         }}
                       >
                         <span className="text-foreground truncate">
                           {isClientFiltered
-                            ? (w.routines?.name || "Sin rutina")
+                            ? (w.routines?.name || "Entrenamiento libre")
                             : w.clients?.name
                           }
                         </span>
@@ -365,7 +438,7 @@ export default function CalendarPage() {
               value={selectedRoutine}
               onChange={e => setSelectedRoutine(e.target.value)}
             >
-              <option value="">Rutina (opcional)</option>
+              <option value="">Sin rutina (agregar ejercicios manualmente)</option>
               {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
             <Button className="w-full" onClick={() => assignWorkout.mutate()} disabled={!selectedClient}>
@@ -402,29 +475,89 @@ export default function CalendarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Workout detail dialog (routine exercises - editable per-client) */}
+      {/* Workout detail dialog — siempre muestra editor de ejercicios */}
       <Dialog open={!!detailWorkout} onOpenChange={() => setDetailWorkout(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {detailWorkout?.clients?.name} — {detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM yyyy", { locale: es })}
             </DialogTitle>
           </DialogHeader>
-          {detailWorkout?.routine_id ? (
-            <div className="mt-4">
-              <p className="text-xs text-muted-foreground mb-3">Los cambios se aplican solo a este alumno, no a la rutina base.</p>
+          {detailWorkout && (
+            <div className="mt-2">
+              {detailWorkout.routine_id && (
+                <p className="text-xs text-muted-foreground mb-3">
+                  Rutina base: <span className="text-primary">{detailWorkout.routines?.name}</span> — Los cambios se aplican solo a este alumno.
+                </p>
+              )}
               <RoutineDetailView
-                routineId={detailWorkout.routine_id}
-                routineName={detailWorkout.routines?.name || "Rutina"}
+                routineId={detailWorkout.routine_id || ""}
+                routineName={detailWorkout.routines?.name || "Entrenamiento"}
                 totalDays={detailWorkout.routines?.total_days || 1}
                 editable={role === "coach"}
                 assignedWorkoutId={detailWorkout.id}
                 clientId={detailWorkout.client_id}
               />
+              {role === "coach" && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => { setDetailWorkout(detailWorkout); setCopyOpen(true); }}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />Copiar a otros días
+                  </Button>
+                </div>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground mt-4">Sin rutina asignada.</p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Copy dialog */}
+      <Dialog open={copyOpen} onOpenChange={setCopyOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Copiar Entrenamiento</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Se copiará el entrenamiento de <span className="text-foreground font-medium">{detailWorkout?.clients?.name}</span> a los días seleccionados.
+            </p>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-2">¿Qué días de la semana?</label>
+              <div className="flex gap-1">
+                {dayNames.map((d, i) => (
+                  <button
+                    key={i}
+                    onClick={() => toggleCopyDay(i)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      copyDays.includes(i) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
+              <Input
+                type="number"
+                min="1"
+                max="52"
+                value={copyWeeks}
+                onChange={e => setCopyWeeks(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={() => copyWorkout.mutate()}
+              disabled={!copyDays.length}
+            >
+              Copiar
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -433,7 +566,6 @@ export default function CalendarPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Planificar Entrenamientos</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-4">
-            {/* Mode toggle */}
             <div className="flex rounded-lg border border-border overflow-hidden">
               <button
                 onClick={() => setBulkMode("client")}
@@ -478,9 +610,10 @@ export default function CalendarPage() {
               value={bulkRoutine}
               onChange={e => setBulkRoutine(e.target.value)}
             >
-              <option value="">Rutina (opcional)</option>
+              <option value="">Sin rutina (agregar ejercicios manualmente)</option>
               {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
+
             <div>
               <label className="text-xs text-muted-foreground block mb-2">¿Qué días entrena?</label>
               <div className="flex gap-1">
@@ -504,9 +637,7 @@ export default function CalendarPage() {
             <Button
               className="w-full"
               onClick={() => bulkAssign.mutate()}
-              disabled={
-                (bulkMode === "client" ? !bulkClient : !bulkGroup) || !bulkDays.length
-              }
+              disabled={(bulkMode === "client" ? !bulkClient : !bulkGroup) || !bulkDays.length}
             >
               Planificar
             </Button>
@@ -539,11 +670,14 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
             <div
               key={w.id}
               className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3 cursor-pointer hover:bg-secondary/70 transition-colors"
-              onClick={() => { if (w.routine_id) onViewDetail(w); }}
+              onClick={() => onViewDetail(w)}
             >
               <div>
                 <p className="font-medium text-foreground">{w.clients?.name}</p>
-                {w.routines?.name && <p className="text-xs text-muted-foreground">{w.routines.name}</p>}
+                {w.routines?.name
+                  ? <p className="text-xs text-muted-foreground">{w.routines.name}</p>
+                  : <p className="text-xs text-muted-foreground">Entrenamiento libre</p>
+                }
               </div>
               {role === "coach" && (
                 <div className="flex gap-1">
