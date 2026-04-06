@@ -84,6 +84,22 @@ export default function KioskPage() {
     },
   });
 
+  const { data: assignedExercises } = useQuery({
+    queryKey: ["kiosk-assigned-exercises", todayWorkouts?.map((w: any) => w.id)],
+    enabled: !!todayWorkouts?.length,
+    queryFn: async () => {
+      const ids = todayWorkouts!.map((w: any) => w.id);
+      const { data, error } = await supabase
+        .from("assigned_workout_exercises")
+        .select("*, exercises(name, muscle_group)")
+        .in("assigned_workout_id", ids)
+        .order("block_number")
+        .order("order_index");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: existingLogs } = useQuery({
     queryKey: ["kiosk-logs", todayWorkouts?.map((w: any) => w.id)],
     enabled: !!todayWorkouts?.length,
@@ -219,7 +235,11 @@ export default function KioskPage() {
           </div>
         ) : (
           todayWorkouts.map((workout: any) => {
-            const exercises = workout.routines?.routine_exercises ?? [];
+            // Prioridad: ejercicios propios del workout, sino los de la rutina base
+            const workoutAssigned = assignedExercises?.filter((e: any) => e.assigned_workout_id === workout.id) ?? [];
+            const exercises = workoutAssigned.length > 0
+              ? workoutAssigned
+              : (workout.routines?.routine_exercises ?? []);
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
             return (
               <div key={workout.id} className="space-y-4 mb-6">
