@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
+ 
 export default function KioskPage() {
   const queryClient = useQueryClient();
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -19,13 +19,13 @@ export default function KioskPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [managingOpen, setManagingOpen] = useState(false);
   const today = format(new Date(), "yyyy-MM-dd");
-
+ 
   // --- Gestión de grupos de kiosco ---
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDesc, setNewGroupDesc] = useState("");
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
   const [memberSearch, setMemberSearch] = useState("");
-
+ 
   const { data: kioskGroups } = useQuery({
     queryKey: ["kiosk-groups"],
     queryFn: async () => {
@@ -34,7 +34,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: allClients } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -43,7 +43,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: groupMembers } = useQuery({
     queryKey: ["kiosk-members", selectedGroup],
     enabled: !!selectedGroup,
@@ -56,7 +56,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: managingGroupMembers } = useQuery({
     queryKey: ["kiosk-managing-members", managingGroupId],
     enabled: !!managingGroupId,
@@ -69,7 +69,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: todayWorkouts } = useQuery({
     queryKey: ["kiosk-workouts", selectedClient, today],
     enabled: !!selectedClient,
@@ -83,7 +83,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: assignedExercises } = useQuery({
     queryKey: ["kiosk-assigned-exercises", todayWorkouts?.map((w: any) => w.id)],
     enabled: !!todayWorkouts?.length,
@@ -99,7 +99,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const { data: existingLogs } = useQuery({
     queryKey: ["kiosk-logs", todayWorkouts?.map((w: any) => w.id)],
     enabled: !!todayWorkouts?.length,
@@ -110,7 +110,7 @@ export default function KioskPage() {
       return data;
     },
   });
-
+ 
   const createGroup = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("kiosk_groups").insert({
@@ -127,7 +127,7 @@ export default function KioskPage() {
     },
     onError: () => toast.error("Error al crear turno"),
   });
-
+ 
   const deleteGroup = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("kiosk_groups").delete().eq("id", id);
@@ -139,7 +139,7 @@ export default function KioskPage() {
       toast.success("Turno eliminado");
     },
   });
-
+ 
   const addMember = useMutation({
     mutationFn: async (clientId: string) => {
       const { error } = await supabase.from("kiosk_group_members").insert({
@@ -155,7 +155,7 @@ export default function KioskPage() {
     },
     onError: () => toast.error("Error (¿ya está en el turno?)"),
   });
-
+ 
   const removeMember = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("kiosk_group_members").delete().eq("id", id);
@@ -166,7 +166,7 @@ export default function KioskPage() {
       toast.success("Alumno removido del turno");
     },
   });
-
+ 
   const logSet = useMutation({
     mutationFn: async (params: {
       assigned_workout_id: string; exercise_id: string;
@@ -192,24 +192,24 @@ export default function KioskPage() {
       toast.success("Serie registrada");
     },
   });
-
+ 
   const groupClientIds = groupMembers?.map((m: any) => m.clients.id) ?? [];
   const allKioskClients = [
     ...(groupMembers?.map((m: any) => ({ id: m.clients.id, name: m.clients.name })) ?? []),
     ...manualClients.filter(c => !groupClientIds.includes(c.id)),
   ];
-
+ 
   const filteredSearch = allClients?.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) &&
     !allKioskClients.some(k => k.id === c.id)
   ) ?? [];
-
+ 
   const managingMemberIds = managingGroupMembers?.map((m: any) => m.client_id) ?? [];
   const filteredMemberSearch = allClients?.filter(c =>
     c.name.toLowerCase().includes(memberSearch.toLowerCase()) &&
     !managingMemberIds.includes(c.id)
   ) ?? [];
-
+ 
   // --- Vista de entrenamiento del alumno ---
   if (selectedClient) {
     return (
@@ -222,12 +222,12 @@ export default function KioskPage() {
             {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
           </span>
         </div>
-
+ 
         <div className="flex items-center gap-2 mb-6">
           <Dumbbell className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
         </div>
-
+ 
         {!todayWorkouts?.length ? (
           <div className="text-center py-12 text-muted-foreground">
             <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -278,7 +278,7 @@ export default function KioskPage() {
       </div>
     );
   }
-
+ 
   // --- Vista principal del kiosco ---
   return (
     <div className="max-w-4xl mx-auto">
@@ -291,7 +291,7 @@ export default function KioskPage() {
           <Settings className="h-4 w-4 mr-2" />Gestionar Turnos
         </Button>
       </div>
-
+ 
       <div className="flex gap-4 mb-8 flex-wrap">
         <div className="flex-1 min-w-[200px]">
           <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno:</label>
@@ -310,7 +310,7 @@ export default function KioskPage() {
           </Button>
         </div>
       </div>
-
+ 
       {searchOpen && (
         <div className="mb-6 bg-card border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
@@ -344,7 +344,7 @@ export default function KioskPage() {
           )}
         </div>
       )}
-
+ 
       {(selectedGroup || allKioskClients.length > 0) && (
         <>
           <p className="text-sm text-muted-foreground mb-4">Tocá tu nombre para ver tu rutina de hoy:</p>
@@ -370,14 +370,14 @@ export default function KioskPage() {
           )}
         </>
       )}
-
+ 
       {/* Dialog para gestionar turnos */}
       <Dialog open={managingOpen} onOpenChange={setManagingOpen}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Gestionar Turnos de Kiosco</DialogTitle>
           </DialogHeader>
-
+ 
           {/* Crear nuevo turno */}
           <div className="bg-secondary/30 rounded-lg p-4 mt-2">
             <p className="text-sm font-medium text-foreground mb-3">Nuevo turno</p>
@@ -401,7 +401,7 @@ export default function KioskPage() {
               </Button>
             </div>
           </div>
-
+ 
           {/* Lista de turnos */}
           <div className="mt-4 space-y-2">
             {!kioskGroups?.length ? (
@@ -428,7 +428,7 @@ export default function KioskPage() {
                       </Button>
                     </div>
                   </div>
-
+ 
                   {/* Panel de alumnos del turno */}
                   {managingGroupId === g.id && (
                     <div className="px-4 py-3 bg-secondary/20 border-t border-border">
@@ -447,7 +447,7 @@ export default function KioskPage() {
                       ) : (
                         <p className="text-xs text-muted-foreground mb-3">Sin alumnos en este turno.</p>
                       )}
-
+ 
                       {/* Buscar y agregar alumnos */}
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
@@ -485,24 +485,31 @@ export default function KioskPage() {
     </div>
   );
 }
-
+ 
 function KioskExerciseCard({
   exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
 }: {
-  exercise: any; sets: number; reps: number; weight: number | null;
+  exercise: any; sets: number | null; reps: number | null; weight: number | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
 }) {
+  const numSets = sets ?? 1;
+  const defaultReps = reps?.toString() ?? "";
+  const defaultWeight = weight?.toString() ?? "";
+ 
   const [localSets, setLocalSets] = useState(
-    Array.from({ length: sets }, (_, i) => {
+    Array.from({ length: numSets }, (_, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
       return {
-        reps: log?.reps_done?.toString() ?? reps.toString(),
-        weight: log?.weight_used?.toString() ?? (weight?.toString() ?? ""),
+        reps: log?.reps_done?.toString() ?? defaultReps,
+        weight: log?.weight_used?.toString() ?? defaultWeight,
       };
     })
   );
-
+ 
+  const setsLabel = sets ? `${sets}×${reps ?? "?"}` : "";
+  const weightLabel = weight ? ` @ ${weight}kg` : "";
+ 
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
@@ -512,7 +519,9 @@ function KioskExerciseCard({
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+        {setsLabel && (
+          <span className="text-xs text-muted-foreground">{setsLabel}{weightLabel}</span>
+        )}
       </div>
       <div className="space-y-2">
         {localSets.map((s, i) => {
