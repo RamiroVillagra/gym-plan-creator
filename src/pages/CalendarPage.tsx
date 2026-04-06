@@ -409,43 +409,43 @@ export default function CalendarPage() {
                     {dayWorkouts.slice(0, 3).map((w: any) => {
                       const wExercises = workoutExercises?.filter((e: any) => e.assigned_workout_id === w.id) ?? [];
                       return (
-                      <div
-                        key={w.id}
-                        className="bg-secondary/50 rounded px-1.5 py-0.5 group text-[10px] cursor-pointer"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setDetailWorkout(w);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-foreground truncate font-medium">
-                            {isClientFiltered
-                              ? (w.routines?.name || "Entrenamiento libre")
-                              : w.clients?.name
-                            }
-                          </span>
-                          {role === "coach" && (
-                            <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
-                              <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}>
-                                <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
-                              </button>
-                              <button onClick={e => { e.stopPropagation(); deleteWorkout.mutate(w.id); }}>
-                                <Trash2 className="h-2.5 w-2.5 text-destructive" />
-                              </button>
+                        <div
+                          key={w.id}
+                          className="bg-secondary/50 rounded px-1.5 py-0.5 group text-[10px] cursor-pointer"
+                          onClick={e => {
+                            e.stopPropagation();
+                            setDetailWorkout(w);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground truncate font-medium">
+                              {isClientFiltered
+                                ? (w.routines?.name || "Entrenamiento libre")
+                                : w.clients?.name
+                              }
+                            </span>
+                            {role === "coach" && (
+                              <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
+                                <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}>
+                                  <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); deleteWorkout.mutate(w.id); }}>
+                                  <Trash2 className="h-2.5 w-2.5 text-destructive" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {isClientFiltered && wExercises.length > 0 && (
+                            <div className="mt-0.5 space-y-0.5">
+                              {wExercises.slice(0, 3).map((ex: any, i: number) => (
+                                <p key={i} className="text-muted-foreground truncate">• {ex.exercises?.name}</p>
+                              ))}
+                              {wExercises.length > 3 && (
+                                <p className="text-muted-foreground">+{wExercises.length - 3} más</p>
+                              )}
                             </div>
                           )}
                         </div>
-                        {isClientFiltered && wExercises.length > 0 && (
-                          <div className="mt-0.5 space-y-0.5">
-                            {wExercises.slice(0, 3).map((ex: any, i: number) => (
-                              <p key={i} className="text-muted-foreground truncate">• {ex.exercises?.name}</p>
-                            ))}
-                            {wExercises.length > 3 && (
-                              <p className="text-muted-foreground">+{wExercises.length - 3} más</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
                       );
                     })}
                     {dayWorkouts.length > 3 && (
@@ -721,41 +721,6 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
                   ? <p className="text-xs text-muted-foreground">{w.routines.name}</p>
                   : <p className="text-xs text-muted-foreground">Entrenamiento libre</p>
                 }
-              </div>
-              {role === "coach" && (
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); onEdit(w); }}>
-                    <Pencil className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); onDelete(w.id); }}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function getDateRange(viewMode: ViewMode, currentDate: Date) {
-  if (viewMode === "month") {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-    const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-    const calEnd = addDays(startOfWeek(addDays(monthEnd, 6), { weekStartsOn: 1 }), 6);
-    const days = eachDayOfInterval({ start: calStart, end: calEnd }).slice(0, 42);
-    return { dateRange: { start: format(calStart, "yyyy-MM-dd"), end: format(calEnd, "yyyy-MM-dd") }, days };
-  } else if (viewMode === "week") {
-    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-    return { dateRange: { start: format(weekStart, "yyyy-MM-dd"), end: format(addDays(weekStart, 6), "yyyy-MM-dd") }, days };
-  } else {
-    return { dateRange: { start: format(currentDate, "yyyy-MM-dd"), end: format(currentDate, "yyyy-MM-dd") }, days: [currentDate] };
-  }
-}
               </div>
               {role === "coach" && (
                 <div className="flex gap-1">
