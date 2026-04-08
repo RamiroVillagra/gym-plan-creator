@@ -273,16 +273,14 @@ export default function ClientsPage() {
                     )}
                   </div>
                   <div className="flex gap-1">
-                    {w.routine_id && (
-                     <Button variant="ghost" size="icon" onClick={() => {
-                        setViewRoutineId(w.routine_id);
-                        setViewRoutineName(w.routines?.name || "Rutina");
-                        setViewRoutineDays(w.routines?.total_days || 1);
-                        setViewAssignedWorkoutId(w.id);
-                      }}>
-                        <Eye className="h-3 w-3 text-primary" />
-                      </Button>
-                    )}
+                    <Button variant="ghost" size="icon" onClick={() => {
+                      setViewRoutineId(w.routine_id || "");
+                      setViewRoutineName(w.routines?.name || "Entrenamiento");
+                      setViewRoutineDays(w.routines?.total_days || 1);
+                      setViewAssignedWorkoutId(w.id);
+                    }}>
+                      <Eye className="h-3 w-3 text-primary" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => removeWorkout.mutate(w.id)}>
                       <Trash2 className="h-3 w-3 text-destructive" />
                     </Button>
@@ -378,17 +376,17 @@ export default function ClientsPage() {
         </Dialog>
 
         {/* View/Edit routine detail dialog */}
-        <Dialog open={!!viewRoutineId} onOpenChange={() => setViewRoutineId(null)}>
+        <Dialog open={!!viewAssignedWorkoutId} onOpenChange={() => { setViewRoutineId(null); setViewAssignedWorkoutId(null); }}>
           <DialogContent className="max-h-[80vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Plan: {viewRoutineName}</DialogTitle></DialogHeader>
-            {viewRoutineId && (
+            {viewAssignedWorkoutId && (
               <div className="mt-4">
                 <RoutineDetailView
-                  routineId={viewRoutineId}
+                  routineId={viewRoutineId ?? ""}
                   routineName={viewRoutineName}
                   totalDays={viewRoutineDays}
                   editable
-                  assignedWorkoutId={viewAssignedWorkoutId ?? undefined}
+                  assignedWorkoutId={viewAssignedWorkoutId}
                   clientId={selectedClient?.id}
                 />
               </div>
