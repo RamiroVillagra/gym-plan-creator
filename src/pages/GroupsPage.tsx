@@ -72,7 +72,7 @@ export default function GroupsPage() {
   const createGroup = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("groups").insert({
-        name, description: description || null, coach_id: user!.id,
+        name, description: description || null,
       });
       if (error) throw error;
     },
