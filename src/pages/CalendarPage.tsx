@@ -24,6 +24,8 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [filterClient, setFilterClient] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
 
   // Assign dialog
   const [assignOpen, setAssignOpen] = useState(false);
@@ -93,15 +95,15 @@ export default function CalendarPage() {
 
   const { data: workouts } = useQuery({
     queryKey: ["assigned-workouts", dateRange.start, dateRange.end, filterClient],
+    enabled: !!filterClient,
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from("assigned_workouts")
         .select("*, clients(name), routines(name, total_days)")
         .gte("workout_date", dateRange.start)
         .lte("workout_date", dateRange.end)
+        .eq("client_id", filterClient)
         .order("workout_date");
-      if (filterClient) query = query.eq("client_id", filterClient);
-      const { data, error } = await query;
       if (error) throw error;
       return data;
     },
@@ -338,14 +340,41 @@ export default function CalendarPage() {
 
         <div className="flex items-center gap-2">
           {role === "coach" && (
-            <select
-              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-              value={filterClient}
-              onChange={e => setFilterClient(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <div className="relative">
+              <Input
+                className="h-9 w-48 text-sm"
+                placeholder="Buscar alumno..."
+                value={clientSearch}
+                onChange={e => {
+                  setClientSearch(e.target.value);
+                  setShowClientDropdown(true);
+                  if (!e.target.value) {
+                    setFilterClient("");
+                  }
+                }}
+                onFocus={() => setShowClientDropdown(true)}
+              />
+              {showClientDropdown && clientSearch && (
+                <div className="absolute top-10 left-0 z-50 w-64 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {clients?.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(c => (
+                    <button
+                      key={c.id}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors"
+                      onClick={() => {
+                        setFilterClient(c.id);
+                        setClientSearch(c.name);
+                        setShowClientDropdown(false);
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                  {clients?.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados</p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           <div className="flex rounded-lg border border-border overflow-hidden">
             {(["month", "week", "day"] as ViewMode[]).map(v => (
