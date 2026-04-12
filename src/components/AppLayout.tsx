@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight } from "lucide-react";
+import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -12,6 +12,7 @@ const coachNav = [
   { to: "/calendar", label: "Calendario", icon: CalendarDays },
   { to: "/groups", label: "Grupos", icon: UsersRound },
   { to: "/kiosk", label: "Modo Kiosco", icon: Monitor },
+  { to: "/stats", label: "Estadísticas", icon: TrendingUp },
 ];
 
 const studentNav = [
