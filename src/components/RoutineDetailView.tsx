@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -266,6 +266,36 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     },
   });
 
+  const moveBlock = useMutation({
+    mutationFn: async ({ blockA, blockB }: { blockA: number; blockB: number }) => {
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return;
+      }
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const idField = isOverrideMode ? "assigned_workout_id" : "routine_id";
+      const idValue = isOverrideMode ? assignedWorkoutId! : routineId;
+
+      // Usar número temporal (9999) para evitar conflictos de unicidad al hacer el swap
+      const idsA = (routineExercises ?? [])
+        .filter((re: any) => re.block_number === blockA && re.day_number === selectedDay)
+        .map((re: any) => re.id);
+      const idsB = (routineExercises ?? [])
+        .filter((re: any) => re.block_number === blockB && re.day_number === selectedDay)
+        .map((re: any) => re.id);
+
+      if (idsA.length) await supabase.from(table).update({ block_number: 9999 }).in("id", idsA);
+      if (idsB.length) await supabase.from(table).update({ block_number: blockA }).in("id", idsB);
+      if (idsA.length) await supabase.from(table).update({ block_number: blockB }).in("id", idsA);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+    },
+    onError: () => toast.error("Error al mover el bloque"),
+  });
+
   const createExercise = useMutation({
     mutationFn: async () => {
       const catName = categories?.find(c => c.id === newExCategoryId)?.name ?? null;
@@ -341,7 +371,35 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           const blockExercises = dayExercises.filter((re: any) => re.block_number === blockNum);
           return (
             <div key={blockNum} className="mb-3">
-              <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1">Bloque {blockNum}</p>
+              <div className="flex items-center gap-1 mb-1">
+                <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex-1">Bloque {blockNum}</p>
+                {editable && (
+                  <>
+                    <button
+                      disabled={blockNum === blocks[0]}
+                      onClick={() => {
+                        const idx = blocks.indexOf(blockNum);
+                        moveBlock.mutate({ blockA: blockNum, blockB: blocks[idx - 1] });
+                      }}
+                      className="p-0.5 rounded hover:bg-secondary/60 disabled:opacity-25 disabled:cursor-default transition-colors"
+                      title="Subir bloque"
+                    >
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                    <button
+                      disabled={blockNum === blocks[blocks.length - 1]}
+                      onClick={() => {
+                        const idx = blocks.indexOf(blockNum);
+                        moveBlock.mutate({ blockA: blockNum, blockB: blocks[idx + 1] });
+                      }}
+                      className="p-0.5 rounded hover:bg-secondary/60 disabled:opacity-25 disabled:cursor-default transition-colors"
+                      title="Bajar bloque"
+                    >
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    </button>
+                  </>
+                )}
+              </div>
               <div className="space-y-1">
                 {blockExercises.map((re: any) => {
                   const isEditing = editingId === re.id;
