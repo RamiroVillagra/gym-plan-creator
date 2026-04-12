@@ -37,6 +37,10 @@ export default function CalendarPage() {
   const [editWorkoutOpen, setEditWorkoutOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<any>(null);
   const [editWorkoutRoutine, setEditWorkoutRoutine] = useState("");
+  const [editWorkoutDay, setEditWorkoutDay] = useState("1");
+
+  // Selected day for assign/edit
+  const [selectedDay, setSelectedDay] = useState("1");
 
   // Workout detail dialog
   const [detailWorkout, setDetailWorkout] = useState<any>(null);
@@ -115,13 +119,14 @@ export default function CalendarPage() {
         client_id: selectedClient,
         routine_id: selectedRoutine || null,
         workout_date: format(selectedDate!, "yyyy-MM-dd"),
+        day_number: parseInt(selectedDay) || 1,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setAssignOpen(false);
-      setSelectedClient(""); setSelectedRoutine("");
+      setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1");
       toast.success("Entrenamiento asignado");
     },
   });
@@ -130,6 +135,7 @@ export default function CalendarPage() {
     mutationFn: async () => {
       const { error } = await supabase.from("assigned_workouts").update({
         routine_id: editWorkoutRoutine || null,
+        day_number: parseInt(editWorkoutDay) || 1,
       }).eq("id", editingWorkout.id);
       if (error) throw error;
     },
@@ -240,16 +246,21 @@ export default function CalendarPage() {
         }
       }
 
+      const routineTotalDays = routines?.find(r => r.id === bulkRoutine)?.total_days ?? 1;
+      const sortedBulkDays = [...bulkDays].sort((a, b) => a - b);
+
       const inserts: any[] = [];
       for (const clientId of clientIds) {
         for (let w = 0; w < weeks; w++) {
-          for (const dayOfWeek of bulkDays) {
+          for (let di = 0; di < sortedBulkDays.length; di++) {
+            const dayOfWeek = sortedBulkDays[di];
             const weekStart = startOfWeek(addWeeks(currentDate, w), { weekStartsOn: 1 });
             const date = addDays(weekStart, dayOfWeek);
             inserts.push({
               client_id: clientId,
               routine_id: bulkRoutine || null,
               workout_date: format(date, "yyyy-MM-dd"),
+              day_number: (di % routineTotalDays) + 1,
             });
           }
         }
@@ -401,7 +412,7 @@ export default function CalendarPage() {
           isClientFiltered={isClientFiltered}
           onAdd={() => { setSelectedDate(currentDate); setAssignOpen(true); }}
           onDelete={(id) => deleteWorkout.mutate(id)}
-          onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}
+          onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}
           onViewDetail={(w) => setDetailWorkout(w)}
         />
       ) : (
@@ -455,7 +466,7 @@ export default function CalendarPage() {
                             </span>
                             {role === "coach" && (
                               <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
-                                <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutOpen(true); }}>
+                                <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}>
                                   <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
                                 </button>
                                 <button onClick={e => { e.stopPropagation(); deleteWorkout.mutate(w.id); }}>
@@ -508,11 +519,35 @@ export default function CalendarPage() {
             <select
               className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
               value={selectedRoutine}
-              onChange={e => setSelectedRoutine(e.target.value)}
+              onChange={e => { setSelectedRoutine(e.target.value); setSelectedDay("1"); }}
             >
               <option value="">Sin rutina (agregar ejercicios manualmente)</option>
-              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}{(r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : ""}</option>)}
             </select>
+            {(() => {
+              const routine = routines?.find(r => r.id === selectedRoutine);
+              const totalDays = (routine as any)?.total_days ?? 1;
+              if (!routine || totalDays <= 1) return null;
+              return (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">¿Qué día de la rutina es este entrenamiento?</label>
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setSelectedDay(String(d))}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                          selectedDay === String(d) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Día {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <Button className="w-full" onClick={() => assignWorkout.mutate()} disabled={!selectedClient}>
               Asignar
             </Button>
@@ -535,11 +570,35 @@ export default function CalendarPage() {
             <select
               className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
               value={editWorkoutRoutine}
-              onChange={e => setEditWorkoutRoutine(e.target.value)}
+              onChange={e => { setEditWorkoutRoutine(e.target.value); setEditWorkoutDay("1"); }}
             >
               <option value="">Sin rutina</option>
-              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}{(r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : ""}</option>)}
             </select>
+            {(() => {
+              const routine = routines?.find(r => r.id === editWorkoutRoutine);
+              const totalDays = (routine as any)?.total_days ?? 1;
+              if (!routine || totalDays <= 1) return null;
+              return (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">¿Qué día de la rutina?</label>
+                  <div className="flex gap-1">
+                    {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setEditWorkoutDay(String(d))}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                          editWorkoutDay === String(d) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        Día {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <Button className="w-full" onClick={() => updateWorkout.mutate()}>
               Guardar Cambios
             </Button>

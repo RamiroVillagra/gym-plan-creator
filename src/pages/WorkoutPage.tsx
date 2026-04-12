@@ -152,7 +152,9 @@ export default function WorkoutPage() {
       )}
 
       {todayWorkouts?.map((workout: any) => {
-        const exercises = workout.routines?.routine_exercises ?? [];
+        const dayNum = workout.day_number ?? 1;
+        const exercises = (workout.routines?.routine_exercises ?? [])
+          .filter((re: any) => (re.day_number ?? 1) === dayNum);
         const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
         const prevLogs = previousLogs?.[workout.id] ?? [];
 

@@ -273,9 +273,10 @@ export default function KioskPage() {
           todayWorkouts.map((workout: any) => {
             // Prioridad: ejercicios propios del workout, sino los de la rutina base
             const workoutAssigned = assignedExercises?.filter((e: any) => e.assigned_workout_id === workout.id) ?? [];
+            const dayNum = workout.day_number ?? 1;
             const exercises = workoutAssigned.length > 0
               ? workoutAssigned
-              : (workout.routines?.routine_exercises ?? []);
+              : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
             return (
               <div key={workout.id} className="space-y-4 mb-6">
