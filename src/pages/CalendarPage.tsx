@@ -633,6 +633,7 @@ export default function CalendarPage() {
                 editable={role === "coach"}
                 assignedWorkoutId={detailWorkout.id}
                 clientId={detailWorkout.client_id}
+                initialDay={detailWorkout.day_number ?? 1}
               />
               {role === "coach" && (
                 <div className="mt-4 pt-4 border-t border-border">

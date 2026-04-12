@@ -42,7 +42,7 @@ export default function WorkoutPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, routine_exercises(*, exercises(name, muscle_group)))")
+        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
         .eq("client_id", effectiveClientId)
         .eq("workout_date", today);
       if (error) throw error;
@@ -161,7 +161,12 @@ export default function WorkoutPage() {
         return (
           <div key={workout.id} className="space-y-4 mb-6">
             {workout.routines?.name && (
-              <h2 className="text-xl font-heading font-bold text-primary">{workout.routines.name}</h2>
+              <h2 className="text-xl font-heading font-bold text-primary">
+                {workout.routines.name}
+                {(workout.routines?.total_days ?? 1) > 1 && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">— Día {workout.day_number ?? 1}</span>
+                )}
+              </h2>
             )}
             {blocks.map((blockNum: number) => {
               const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);

@@ -14,11 +14,14 @@ interface RoutineDetailViewProps {
   editable?: boolean;
   assignedWorkoutId?: string;
   clientId?: string;
+  initialDay?: number;
 }
 
-export default function RoutineDetailView({ routineId = "", routineName, totalDays, editable = false, assignedWorkoutId, clientId }: RoutineDetailViewProps) {
+export default function RoutineDetailView({ routineId = "", routineName, totalDays, editable = false, assignedWorkoutId, clientId, initialDay = 1 }: RoutineDetailViewProps) {
   const queryClient = useQueryClient();
-  const [selectedDay, setSelectedDay] = useState(1);
+  // Cuando hay un workout asignado con día específico, ese día es fijo
+  const isFixedDay = !!assignedWorkoutId;
+  const [selectedDay, setSelectedDay] = useState(initialDay);
   const [addExOpen, setAddExOpen] = useState(false);
   const [addExBlock, setAddExBlock] = useState(1);
   const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
@@ -311,16 +314,23 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
             <button
               key={d}
-              onClick={() => setSelectedDay(d)}
+              onClick={() => { if (!isFixedDay) setSelectedDay(d); }}
               className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
                 selectedDay === d
                   ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:text-foreground"
+                  : isFixedDay
+                    ? "bg-secondary/40 text-muted-foreground cursor-default opacity-40"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
               }`}
             >
               Día {d}
             </button>
           ))}
+          {isFixedDay && (
+            <span className="text-[10px] text-muted-foreground self-center ml-1">
+              (día asignado)
+            </span>
+          )}
         </div>
       )}
 
