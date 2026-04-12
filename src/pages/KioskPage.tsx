@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2 } from "lucide-react";
-import { format, startOfWeek, endOfWeek, eachDayOfInterval } from "date-fns";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ export default function KioskPage() {
   const [clientSearch, setClientSearch] = useState("");
   const [managingOpen, setManagingOpen] = useState(false);
   const [pendingManualClient, setPendingManualClient] = useState<{ id: string; name: string } | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
   const today = format(new Date(), "yyyy-MM-dd");
  
   // --- Gestión de grupos de kiosco ---
@@ -45,11 +46,12 @@ export default function KioskPage() {
     },
   });
 
-  const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
-  const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+  const baseWeek = addWeeks(new Date(), weekOffset);
+  const weekStart = format(startOfWeek(baseWeek, { weekStartsOn: 1 }), "yyyy-MM-dd");
+  const weekEnd = format(endOfWeek(baseWeek, { weekStartsOn: 1 }), "yyyy-MM-dd");
   const weekDays = eachDayOfInterval({
-    start: startOfWeek(new Date(), { weekStartsOn: 1 }),
-    end: endOfWeek(new Date(), { weekStartsOn: 1 }),
+    start: startOfWeek(baseWeek, { weekStartsOn: 1 }),
+    end: endOfWeek(baseWeek, { weekStartsOn: 1 }),
   });
 
   const { data: pendingClientWeekWorkouts } = useQuery({
@@ -382,50 +384,93 @@ export default function KioskPage() {
                 ¿Qué día usa <span className="text-primary">{pendingManualClient.name}</span> hoy?
               </p>
               <p className="text-xs text-muted-foreground mb-3">
-                Elegí un día de la semana para asignarle ese entrenamiento.
+                Tocá el día cuyo entrenamiento querés asignarle para hoy.
               </p>
+
+              {/* Navegación de semana */}
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setWeekOffset(o => o - 1)}
+                  className="p-1 rounded hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs text-muted-foreground font-medium">
+                  {format(startOfWeek(baseWeek, { weekStartsOn: 1 }), "d MMM", { locale: es })} — {format(endOfWeek(baseWeek, { weekStartsOn: 1 }), "d MMM yyyy", { locale: es })}
+                </span>
+                <button
+                  onClick={() => setWeekOffset(o => o + 1)}
+                  className="p-1 rounded hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Días de la semana */}
               <div className="grid grid-cols-7 gap-1 mb-3">
                 {weekDays.map(day => {
                   const dateStr = format(day, "yyyy-MM-dd");
                   const isToday = dateStr === today;
                   const workout = pendingClientWeekWorkouts?.find(w => w.workout_date === dateStr);
+                  const hasRoutine = !!(workout as any)?.routines?.id;
+                  const isClickable = hasRoutine && !isToday;
+
                   return (
                     <button
                       key={dateStr}
-                      disabled={!workout || isToday}
+                      disabled={!isClickable}
                       onClick={async () => {
-                        if (!workout?.routines) return;
-                        await assignWorkoutToday.mutateAsync({
-                          clientId: pendingManualClient.id,
-                          routineId: (workout.routines as any).id,
-                        });
-                        setManualClients(prev => [...prev, pendingManualClient]);
-                        queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
-                        toast.success(`${pendingManualClient.name} — entrenamiento del ${format(day, "EEEE", { locale: es })} asignado para hoy`);
-                        setPendingManualClient(null);
-                        setSearchOpen(false);
+                        const routineId = (workout as any).routines.id;
+                        const routineName = (workout as any).routines.name;
+                        try {
+                          await assignWorkoutToday.mutateAsync({
+                            clientId: pendingManualClient.id,
+                            routineId,
+                          });
+                          setManualClients(prev => [...prev, pendingManualClient]);
+                          queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
+                          toast.success(`${pendingManualClient.name} — "${routineName}" asignado para hoy`);
+                          setPendingManualClient(null);
+                          setWeekOffset(0);
+                          setSearchOpen(false);
+                        } catch {
+                          toast.error("Error al asignar el entrenamiento");
+                        }
                       }}
                       className={`flex flex-col items-center rounded-lg p-1.5 text-xs transition-colors border
-                        ${isToday ? "border-primary/30 bg-primary/5 opacity-50 cursor-default" :
-                          workout ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer" :
-                          "border-border bg-secondary/20 text-muted-foreground opacity-40 cursor-default"}`}
+                        ${isToday
+                          ? "border-primary/30 bg-primary/5 text-primary opacity-60 cursor-default"
+                          : isClickable
+                            ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/25 cursor-pointer"
+                            : "border-border bg-secondary/20 text-muted-foreground opacity-40 cursor-default"
+                        }`}
                     >
                       <span className="font-bold uppercase">{format(day, "EEE", { locale: es }).slice(0, 2)}</span>
                       <span className="mt-0.5">{format(day, "d")}</span>
-                      {workout && !isToday && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1" />
-                      )}
+                      {isClickable && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1" />}
+                      {isToday && <div className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-1" />}
                     </button>
                   );
                 })}
               </div>
-              {pendingClientWeekWorkouts !== undefined && !pendingClientWeekWorkouts.filter(w => w.workout_date !== today).length && (
+
+              {pendingClientWeekWorkouts !== undefined && pendingClientWeekWorkouts.filter(w => {
+                const isNotToday = w.workout_date !== today;
+                const hasR = !!(w as any).routines?.id;
+                return isNotToday && hasR;
+              }).length === 0 && (
                 <p className="text-xs text-muted-foreground text-center mb-3">
-                  Este alumno no tiene entrenamientos asignados esta semana.
+                  Sin entrenamientos en esta semana. Navegá a otra semana.
                 </p>
               )}
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" className="flex-1" onClick={() => setPendingManualClient(null)}>
+
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => { setPendingManualClient(null); setWeekOffset(0); }}
+                >
                   ← Volver
                 </Button>
                 <Button
@@ -436,6 +481,7 @@ export default function KioskPage() {
                     setManualClients(prev => [...prev, pendingManualClient]);
                     toast.success(`${pendingManualClient.name} agregado sin entrenamiento`);
                     setPendingManualClient(null);
+                    setWeekOffset(0);
                     setSearchOpen(false);
                   }}
                 >
