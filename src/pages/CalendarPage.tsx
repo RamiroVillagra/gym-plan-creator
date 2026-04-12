@@ -246,12 +246,23 @@ export default function CalendarPage() {
         }
       }
 
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Para cada día seleccionado, calcular la primera ocurrencia >= hoy
+      const firstOccurrences = bulkDays.map(({ dayOfWeek, routineDay }) => {
+        const thisWeekOccurrence = addDays(startOfWeek(today, { weekStartsOn: 1 }), dayOfWeek);
+        const firstDate = thisWeekOccurrence < today
+          ? addWeeks(thisWeekOccurrence, 1) // ya pasó esta semana → próxima semana
+          : thisWeekOccurrence;             // es hoy o futuro → usar esa fecha
+        return { dayOfWeek, routineDay, firstDate };
+      });
+
       const inserts: any[] = [];
       for (const clientId of clientIds) {
-        for (let w = 0; w < weeks; w++) {
-          for (const { dayOfWeek, routineDay } of bulkDays) {
-            const weekStart = startOfWeek(addWeeks(currentDate, w), { weekStartsOn: 1 });
-            const date = addDays(weekStart, dayOfWeek);
+        for (const { routineDay, firstDate } of firstOccurrences) {
+          for (let w = 0; w < weeks; w++) {
+            const date = addWeeks(firstDate, w);
             inserts.push({
               client_id: clientId,
               routine_id: bulkRoutine || null,
