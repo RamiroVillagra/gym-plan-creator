@@ -71,6 +71,12 @@ export default function KioskPage() {
 
   const assignWorkoutToday = useMutation({
     mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string; dayNumber: number; sourceWorkoutId: string }) => {
+      // Borrar cualquier workout existente para hoy (evita duplicados)
+      await supabase.from("assigned_workouts")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("workout_date", today);
+
       // Crear el workout de hoy con el day_number correcto
       const { data: newWorkout, error } = await supabase.from("assigned_workouts").insert({
         client_id: clientId,
@@ -80,13 +86,14 @@ export default function KioskPage() {
       }).select().single();
       if (error) throw error;
 
-      // Copiar los ejercicios modificados del día fuente (si tiene)
+      // Primero intentar copiar ejercicios modificados del día fuente
       const { data: sourceExercises } = await supabase
         .from("assigned_workout_exercises")
         .select("*")
         .eq("assigned_workout_id", sourceWorkoutId);
 
       if (sourceExercises?.length && newWorkout) {
+        // Tiene ejercicios modificados → copiar esos
         const copies = sourceExercises.map((ex: any) => ({
           assigned_workout_id: newWorkout.id,
           exercise_id: ex.exercise_id,
@@ -99,6 +106,27 @@ export default function KioskPage() {
           rest_seconds: ex.rest_seconds,
         }));
         await supabase.from("assigned_workout_exercises").insert(copies);
+      } else if (newWorkout) {
+        // No tiene modificaciones → copiar desde la rutina base filtrando por el día correcto
+        const { data: baseExercises } = await supabase
+          .from("routine_exercises")
+          .select("*")
+          .eq("routine_id", routineId)
+          .eq("day_number", dayNumber);
+        if (baseExercises?.length) {
+          const copies = baseExercises.map((ex: any) => ({
+            assigned_workout_id: newWorkout.id,
+            exercise_id: ex.exercise_id,
+            sets: ex.sets,
+            reps: ex.reps,
+            weight: ex.weight,
+            order_index: ex.order_index,
+            block_number: ex.block_number,
+            day_number: ex.day_number,
+            rest_seconds: ex.rest_seconds,
+          }));
+          await supabase.from("assigned_workout_exercises").insert(copies);
+        }
       }
     },
   });
@@ -135,7 +163,7 @@ export default function KioskPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
+        .select("*, routines(name, total_days)")
         .eq("client_id", selectedClient!)
         .eq("workout_date", today);
       if (error) throw error;
@@ -294,12 +322,10 @@ export default function KioskPage() {
           </div>
         ) : (
           todayWorkouts.map((workout: any) => {
-            // Prioridad: ejercicios propios del workout (modificados), sino los de la rutina base
-            const workoutAssigned = assignedExercises?.filter((e: any) => e.assigned_workout_id === workout.id) ?? [];
+            // Siempre usar ejercicios personalizados del workout (assigned_workout_exercises)
             const dayNum = workout.day_number ?? 1;
-            const exercises = workoutAssigned.length > 0
-              ? workoutAssigned.filter((e: any) => (e.day_number ?? 1) === dayNum)
-              : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
+            const exercises = (assignedExercises ?? [])
+              .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
             return (
               <div key={workout.id} className="space-y-4 mb-6">

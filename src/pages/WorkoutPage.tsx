@@ -42,7 +42,7 @@ export default function WorkoutPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
+        .select("*, routines(name, total_days)")
         .eq("client_id", effectiveClientId)
         .eq("workout_date", today);
       if (error) throw error;
@@ -169,10 +169,8 @@ export default function WorkoutPage() {
 
       {todayWorkouts?.map((workout: any) => {
         const dayNum = workout.day_number ?? 1;
-        const workoutAssigned = assignedExercises?.filter((e: any) => e.assigned_workout_id === workout.id) ?? [];
-        const exercises = workoutAssigned.length > 0
-          ? workoutAssigned.filter((e: any) => (e.day_number ?? 1) === dayNum)
-          : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
+        const exercises = (assignedExercises ?? [])
+          .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
         const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
         const prevLogs = previousLogs?.[workout.id] ?? [];
 
