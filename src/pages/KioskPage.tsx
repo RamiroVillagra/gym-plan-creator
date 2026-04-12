@@ -70,13 +70,36 @@ export default function KioskPage() {
   });
 
   const assignWorkoutToday = useMutation({
-    mutationFn: async ({ clientId, routineId }: { clientId: string; routineId: string }) => {
-      const { error } = await supabase.from("assigned_workouts").insert({
+    mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string; dayNumber: number; sourceWorkoutId: string }) => {
+      // Crear el workout de hoy con el day_number correcto
+      const { data: newWorkout, error } = await supabase.from("assigned_workouts").insert({
         client_id: clientId,
         routine_id: routineId,
         workout_date: today,
-      });
+        day_number: dayNumber,
+      }).select().single();
       if (error) throw error;
+
+      // Copiar los ejercicios modificados del día fuente (si tiene)
+      const { data: sourceExercises } = await supabase
+        .from("assigned_workout_exercises")
+        .select("*")
+        .eq("assigned_workout_id", sourceWorkoutId);
+
+      if (sourceExercises?.length && newWorkout) {
+        const copies = sourceExercises.map((ex: any) => ({
+          assigned_workout_id: newWorkout.id,
+          exercise_id: ex.exercise_id,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight: ex.weight,
+          order_index: ex.order_index,
+          block_number: ex.block_number,
+          day_number: ex.day_number,
+          rest_seconds: ex.rest_seconds,
+        }));
+        await supabase.from("assigned_workout_exercises").insert(copies);
+      }
     },
   });
  
@@ -428,10 +451,13 @@ export default function KioskPage() {
                       onClick={async () => {
                         const routineId = (workout as any).routines.id;
                         const routineName = (workout as any).routines.name;
+                        const dayNumber = (workout as any).day_number ?? 1;
                         try {
                           await assignWorkoutToday.mutateAsync({
                             clientId: pendingManualClient.id,
                             routineId,
+                            dayNumber,
+                            sourceWorkoutId: workout.id,
                           });
                           setManualClients(prev => [...prev, pendingManualClient]);
                           queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
