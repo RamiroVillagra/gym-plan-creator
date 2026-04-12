@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor } from "lucide-react";
+import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -22,50 +22,74 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { role, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const navItems = role === "coach" ? coachNav : studentNav;
 
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar - desktop */}
-      <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card p-6 gap-2">
-        <Link to="/" className="flex items-center gap-3 mb-8">
-          <img src="/logo.png" alt="Delta App" className="h-8 w-8 object-contain" />
-          <span className="font-heading text-xl font-bold text-foreground">Delta App</span>
+      <aside className={cn(
+        "hidden md:flex flex-col border-r border-border bg-card gap-2 transition-all duration-300 relative",
+        sidebarOpen ? "w-64 p-6" : "w-16 p-3"
+      )}>
+        {/* Toggle button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="absolute -right-3 top-8 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground shadow-sm transition-colors"
+        >
+          {sidebarOpen ? <ChevronLeft className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
+
+        <Link to="/" className={cn("flex items-center gap-3", sidebarOpen ? "mb-8" : "mb-6 justify-center")}>
+          <img src="/logo.png" alt="Delta App" className="h-8 w-8 object-contain shrink-0" />
+          {sidebarOpen && <span className="font-heading text-xl font-bold text-foreground">Delta App</span>}
         </Link>
+
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}
+              title={!sidebarOpen ? item.label : undefined}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                !sidebarOpen && "justify-center px-2",
                 location.pathname === item.to
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <item.icon className="h-4 w-4 shrink-0" />
+              {sidebarOpen && item.label}
             </Link>
           ))}
         </nav>
-        <div className="mt-auto">
+
+        <div className="mt-auto flex flex-col gap-1">
           {role === "coach" && (
             <Link
               to="/workout"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted transition-colors mb-1"
+              title={!sidebarOpen ? "Vista Alumno" : undefined}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-secondary text-secondary-foreground hover:bg-muted transition-colors",
+                !sidebarOpen && "justify-center px-2"
+              )}
             >
-              <Dumbbell className="h-4 w-4" />
-              Vista Alumno
+              <Dumbbell className="h-4 w-4 shrink-0" />
+              {sidebarOpen && "Vista Alumno"}
             </Link>
           )}
           <button
             onClick={signOut}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors w-full"
+            title={!sidebarOpen ? "Cerrar sesión" : undefined}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors w-full",
+              !sidebarOpen && "justify-center px-2"
+            )}
           >
-            <LogOut className="h-4 w-4" />
-            Cerrar sesión
+            <LogOut className="h-4 w-4 shrink-0" />
+            {sidebarOpen && "Cerrar sesión"}
           </button>
         </div>
       </aside>
