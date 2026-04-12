@@ -32,7 +32,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
   const [createExOpen, setCreateExOpen] = useState(false);
   const [newExName, setNewExName] = useState("");
-  const [newExMuscle, setNewExMuscle] = useState("");
+  const [newExCategoryId, setNewExCategoryId] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editSets, setEditSets] = useState("");
@@ -265,9 +265,11 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
   const createExercise = useMutation({
     mutationFn: async () => {
+      const catName = categories?.find(c => c.id === newExCategoryId)?.name ?? null;
       const { data, error } = await supabase.from("exercises").insert({
         name: newExName,
-        muscle_group: newExMuscle || null,
+        category_id: newExCategoryId || null,
+        muscle_group: catName,
       }).select().single();
       if (error) throw error;
       return data;
@@ -275,9 +277,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
       setCreateExOpen(false);
-      setNewExName(""); setNewExMuscle("");
-      setSelectedExercise(data.id);
-      toast.success("Ejercicio creado");
+      setNewExName(""); setNewExCategoryId("");
+      setSelectedExercises(prev => new Set([...prev, data.id]));
+      toast.success("Ejercicio creado y seleccionado");
     },
   });
 
@@ -529,9 +531,29 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             <DialogContent>
               <DialogHeader><DialogTitle>Crear Ejercicio Nuevo</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
-                <Input placeholder="Nombre del ejercicio *" value={newExName} onChange={e => setNewExName(e.target.value)} />
-                <Input placeholder="Grupo muscular (opcional)" value={newExMuscle} onChange={e => setNewExMuscle(e.target.value)} />
-                <Button className="w-full" onClick={() => createExercise.mutate()} disabled={!newExName.trim()}>Crear</Button>
+                <Input
+                  placeholder="Nombre del ejercicio *"
+                  value={newExName}
+                  onChange={e => setNewExName(e.target.value)}
+                />
+                <div>
+                  <label className="text-xs text-muted-foreground">Categoría (opcional)</label>
+                  <select
+                    className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground mt-1"
+                    value={newExCategoryId}
+                    onChange={e => setNewExCategoryId(e.target.value)}
+                  >
+                    <option value="">Sin categoría</option>
+                    {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={() => createExercise.mutate()}
+                  disabled={!newExName.trim()}
+                >
+                  Crear y seleccionar
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
