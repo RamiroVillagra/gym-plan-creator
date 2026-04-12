@@ -47,7 +47,7 @@ export default function CalendarPage() {
 
   // Copy dialog (mismo alumno, otros días)
   const [copyOpen, setCopyOpen] = useState(false);
-  const [copyDays, setCopyDays] = useState<number[]>([]);
+  const [copyDays, setCopyDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
   const [copyWeeks, setCopyWeeks] = useState("1");
 
   // Copy to client dialog (otro alumno)
@@ -156,37 +156,44 @@ export default function CalendarPage() {
     mutationFn: async () => {
       if (!detailWorkout || !copyDays.length) return;
       const weeks = parseInt(copyWeeks) || 1;
+      const workoutDate = new Date(detailWorkout.workout_date + "T12:00:00");
 
-      // Obtener ejercicios del workout original
-      const { data: originalExercises } = await supabase
-        .from("assigned_workout_exercises")
-        .select("*")
-        .eq("assigned_workout_id", detailWorkout.id);
-
-      // Si no tiene ejercicios propios, buscar los de la rutina base
-      const { data: baseExercises } = detailWorkout.routine_id
-        ? await supabase
+      // Para cada día destino, obtener sus ejercicios según el routineDay elegido
+      const exercisesByRoutineDay: Record<number, any[]> = {};
+      for (const { routineDay } of copyDays) {
+        if (exercisesByRoutineDay[routineDay] !== undefined) continue;
+        const { data: overrides } = await supabase
+          .from("assigned_workout_exercises")
+          .select("*")
+          .eq("assigned_workout_id", detailWorkout.id)
+          .eq("day_number", routineDay);
+        if (overrides?.length) {
+          exercisesByRoutineDay[routineDay] = overrides;
+        } else if (detailWorkout.routine_id) {
+          const { data: base } = await supabase
             .from("routine_exercises")
             .select("*")
             .eq("routine_id", detailWorkout.routine_id)
-        : { data: [] };
-
-      const exercisesToCopy = (originalExercises?.length ? originalExercises : baseExercises) ?? [];
+            .eq("day_number", routineDay);
+          exercisesByRoutineDay[routineDay] = base ?? [];
+        } else {
+          exercisesByRoutineDay[routineDay] = [];
+        }
+      }
 
       const inserts: any[] = [];
-      const workoutDate = new Date(detailWorkout.workout_date + "T12:00:00");
-
-      // Calcular todas las fechas destino
       const targetDates: string[] = [];
       for (let w = 0; w < weeks; w++) {
-        for (const dayOfWeek of copyDays) {
+        for (const { dayOfWeek, routineDay } of copyDays) {
           const weekStart = startOfWeek(addWeeks(workoutDate, w + 1), { weekStartsOn: 1 });
           const date = addDays(weekStart, dayOfWeek);
-          targetDates.push(format(date, "yyyy-MM-dd"));
+          const dateStr = format(date, "yyyy-MM-dd");
+          targetDates.push(dateStr);
           inserts.push({
             client_id: detailWorkout.client_id,
             routine_id: detailWorkout.routine_id || null,
-            workout_date: format(date, "yyyy-MM-dd"),
+            workout_date: dateStr,
+            day_number: routineDay,
           });
         }
       }
@@ -207,28 +214,33 @@ export default function CalendarPage() {
         .select();
       if (error) throw error;
 
-      // Copiar ejercicios a cada nuevo workout
-      if (exercisesToCopy.length && newWorkouts?.length) {
-        const exerciseInserts = newWorkouts.flatMap(nw =>
-          exercisesToCopy.map((ex: any) => ({
-            assigned_workout_id: nw.id,
-            exercise_id: ex.exercise_id,
-            sets: ex.sets,
-            reps: ex.reps,
-            weight: ex.weight,
-            order_index: ex.order_index,
-            block_number: ex.block_number,
-            day_number: ex.day_number,
-            rest_seconds: ex.rest_seconds,
-          }))
-        );
-        await supabase.from("assigned_workout_exercises").insert(exerciseInserts);
+      // Copiar ejercicios correctos a cada nuevo workout
+      if (newWorkouts?.length) {
+        const exerciseInserts: any[] = [];
+        for (const nw of newWorkouts) {
+          const exs = exercisesByRoutineDay[nw.day_number] ?? [];
+          for (const ex of exs) {
+            exerciseInserts.push({
+              assigned_workout_id: nw.id,
+              exercise_id: ex.exercise_id,
+              sets: ex.sets,
+              reps: ex.reps,
+              weight: ex.weight,
+              order_index: ex.order_index,
+              block_number: ex.block_number,
+              day_number: ex.day_number,
+              rest_seconds: ex.rest_seconds,
+            });
+          }
+        }
+        if (exerciseInserts.length) await supabase.from("assigned_workout_exercises").insert(exerciseInserts);
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setCopyOpen(false);
       setCopyDays([]); setCopyWeeks("1");
+
       toast.success("Entrenamiento copiado");
     },
     onError: () => toast.error("Error al copiar"),
@@ -400,7 +412,15 @@ export default function CalendarPage() {
   const setBulkRoutineDay = (dayOfWeek: number, routineDay: number) => {
     setBulkDays(prev => prev.map(x => x.dayOfWeek === dayOfWeek ? { ...x, routineDay } : x));
   };
-  const toggleCopyDay = (d: number) => setCopyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  const toggleCopyDay = (dayOfWeek: number) => {
+    setCopyDays(prev => {
+      const exists = prev.find(x => x.dayOfWeek === dayOfWeek);
+      if (exists) return prev.filter(x => x.dayOfWeek !== dayOfWeek);
+      return [...prev, { dayOfWeek, routineDay: detailWorkout?.day_number ?? 1 }];
+    });
+  };
+  const setCopyRoutineDay = (dayOfWeek: number, routineDay: number) =>
+    setCopyDays(prev => prev.map(x => x.dayOfWeek === dayOfWeek ? { ...x, routineDay } : x));
 
   const isClientFiltered = !!filterClient;
 
@@ -757,19 +777,50 @@ export default function CalendarPage() {
             </p>
             <div>
               <label className="text-xs text-muted-foreground block mb-2">¿Qué días de la semana?</label>
-              <div className="flex gap-1">
-                {dayNames.map((d, i) => (
-                  <button
-                    key={i}
-                    onClick={() => toggleCopyDay(i)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
-                      copyDays.includes(i) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
+              <div className="flex gap-1 mb-3">
+                {dayNames.map((d, i) => {
+                  const isSelected = copyDays.some(x => x.dayOfWeek === i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => toggleCopyDay(i)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        isSelected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
               </div>
+              {/* Por cada día seleccionado, elegir qué día de la rutina */}
+              {(() => {
+                const totalDays = detailWorkout?.routines?.total_days ?? 1;
+                if (totalDays <= 1 || !copyDays.length) return null;
+                return (
+                  <div className="space-y-2 border border-border rounded-lg p-3 bg-secondary/20">
+                    <p className="text-xs text-muted-foreground font-medium">¿Qué día de la rutina corresponde a cada día?</p>
+                    {[...copyDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(({ dayOfWeek, routineDay }) => (
+                      <div key={dayOfWeek} className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-foreground w-8">{dayNames[dayOfWeek]}</span>
+                        <div className="flex gap-1 flex-1">
+                          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setCopyRoutineDay(dayOfWeek, d)}
+                              className={`flex-1 py-1 rounded text-xs font-medium transition-colors ${
+                                routineDay === d ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              D{d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
