@@ -56,7 +56,7 @@ export default function CalendarPage() {
   const [bulkClient, setBulkClient] = useState("");
   const [bulkGroup, setBulkGroup] = useState("");
   const [bulkRoutine, setBulkRoutine] = useState("");
-  const [bulkDays, setBulkDays] = useState<number[]>([]);
+  const [bulkDays, setBulkDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
   const [bulkWeeks, setBulkWeeks] = useState("4");
 
   const { dateRange, days } = getDateRange(viewMode, currentDate);
@@ -246,21 +246,17 @@ export default function CalendarPage() {
         }
       }
 
-      const routineTotalDays = routines?.find(r => r.id === bulkRoutine)?.total_days ?? 1;
-      const sortedBulkDays = [...bulkDays].sort((a, b) => a - b);
-
       const inserts: any[] = [];
       for (const clientId of clientIds) {
         for (let w = 0; w < weeks; w++) {
-          for (let di = 0; di < sortedBulkDays.length; di++) {
-            const dayOfWeek = sortedBulkDays[di];
+          for (const { dayOfWeek, routineDay } of bulkDays) {
             const weekStart = startOfWeek(addWeeks(currentDate, w), { weekStartsOn: 1 });
             const date = addDays(weekStart, dayOfWeek);
             inserts.push({
               client_id: clientId,
               routine_id: bulkRoutine || null,
               workout_date: format(date, "yyyy-MM-dd"),
-              day_number: (di % routineTotalDays) + 1,
+              day_number: routineDay,
             });
           }
         }
@@ -271,7 +267,7 @@ export default function CalendarPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setBulkOpen(false);
-      setBulkDays([]); setBulkClient(""); setBulkGroup(""); setBulkRoutine("");
+      setBulkDays([]); setBulkClient(""); setBulkGroup(""); setBulkRoutine(""); setBulkWeeks("4");
       toast.success("Entrenamientos asignados");
     },
   });
@@ -310,7 +306,16 @@ export default function CalendarPage() {
     },
   });
 
-  const toggleBulkDay = (d: number) => setBulkDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
+  const toggleBulkDay = (dayOfWeek: number) => {
+    setBulkDays(prev => {
+      const exists = prev.find(x => x.dayOfWeek === dayOfWeek);
+      if (exists) return prev.filter(x => x.dayOfWeek !== dayOfWeek);
+      return [...prev, { dayOfWeek, routineDay: 1 }];
+    });
+  };
+  const setBulkRoutineDay = (dayOfWeek: number, routineDay: number) => {
+    setBulkDays(prev => prev.map(x => x.dayOfWeek === dayOfWeek ? { ...x, routineDay } : x));
+  };
   const toggleCopyDay = (d: number) => setCopyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]);
 
   const isClientFiltered = !!filterClient;
@@ -739,27 +744,60 @@ export default function CalendarPage() {
             <select
               className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
               value={bulkRoutine}
-              onChange={e => setBulkRoutine(e.target.value)}
+              onChange={e => { setBulkRoutine(e.target.value); setBulkDays([]); }}
             >
               <option value="">Sin rutina (agregar ejercicios manualmente)</option>
-              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}{(r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : ""}</option>)}
             </select>
 
             <div>
               <label className="text-xs text-muted-foreground block mb-2">¿Qué días entrena?</label>
-              <div className="flex gap-1">
-                {dayNames.map((d, i) => (
-                  <button
-                    key={i}
-                    onClick={() => toggleBulkDay(i)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
-                      bulkDays.includes(i) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
+              <div className="flex gap-1 mb-3">
+                {dayNames.map((d, i) => {
+                  const isSelected = bulkDays.some(x => x.dayOfWeek === i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => toggleBulkDay(i)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        isSelected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Por cada día seleccionado, elegir qué día de la rutina */}
+              {(() => {
+                const routine = routines?.find(r => r.id === bulkRoutine);
+                const totalDays = (routine as any)?.total_days ?? 1;
+                if (!bulkRoutine || totalDays <= 1 || !bulkDays.length) return null;
+                return (
+                  <div className="space-y-2 border border-border rounded-lg p-3 bg-secondary/20">
+                    <p className="text-xs text-muted-foreground font-medium">¿Qué día de la rutina corresponde a cada día?</p>
+                    {[...bulkDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(({ dayOfWeek, routineDay }) => (
+                      <div key={dayOfWeek} className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-foreground w-8">{dayNames[dayOfWeek]}</span>
+                        <div className="flex gap-1 flex-1">
+                          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setBulkRoutineDay(dayOfWeek, d)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                routineDay === d ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Día {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
@@ -768,7 +806,7 @@ export default function CalendarPage() {
             <Button
               className="w-full"
               onClick={() => bulkAssign.mutate()}
-              disabled={(bulkMode === "client" ? !bulkClient : !bulkGroup) || !bulkDays.length}
+              disabled={(bulkMode === "client" ? !bulkClient : !bulkGroup) || !bulkDays.length || bulkDays.length === 0}
             >
               Planificar
             </Button>
