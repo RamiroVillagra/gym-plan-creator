@@ -45,10 +45,15 @@ export default function CalendarPage() {
   // Workout detail dialog
   const [detailWorkout, setDetailWorkout] = useState<any>(null);
 
-  // Copy dialog
+  // Copy dialog (mismo alumno, otros días)
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyDays, setCopyDays] = useState<number[]>([]);
   const [copyWeeks, setCopyWeeks] = useState("1");
+
+  // Copy to client dialog (otro alumno)
+  const [copyToClientOpen, setCopyToClientOpen] = useState(false);
+  const [copyToClient, setCopyToClient] = useState("");
+  const [copyToDate, setCopyToDate] = useState("");
 
   // Bulk assign dialog
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -225,6 +230,74 @@ export default function CalendarPage() {
       setCopyOpen(false);
       setCopyDays([]); setCopyWeeks("1");
       toast.success("Entrenamiento copiado");
+    },
+    onError: () => toast.error("Error al copiar"),
+  });
+
+  const copyWorkoutToClient = useMutation({
+    mutationFn: async () => {
+      if (!detailWorkout || !copyToClient || !copyToDate) return;
+
+      // Obtener ejercicios del workout original (modificados o base)
+      const { data: originalExercises } = await supabase
+        .from("assigned_workout_exercises")
+        .select("*")
+        .eq("assigned_workout_id", detailWorkout.id);
+
+      const exercisesToCopy = originalExercises?.length ? originalExercises : [];
+
+      // Si no tiene ejercicios propios, buscar en la rutina base filtrado por día
+      let finalExercises = exercisesToCopy;
+      if (!finalExercises.length && detailWorkout.routine_id) {
+        const { data: baseEx } = await supabase
+          .from("routine_exercises")
+          .select("*")
+          .eq("routine_id", detailWorkout.routine_id)
+          .eq("day_number", detailWorkout.day_number ?? 1);
+        finalExercises = baseEx ?? [];
+      }
+
+      // Borrar workout existente del alumno destino en esa fecha (evita duplicados)
+      await supabase
+        .from("assigned_workouts")
+        .delete()
+        .eq("client_id", copyToClient)
+        .eq("workout_date", copyToDate);
+
+      // Crear el nuevo workout para el alumno destino
+      const { data: newWorkout, error } = await supabase
+        .from("assigned_workouts")
+        .insert({
+          client_id: copyToClient,
+          routine_id: detailWorkout.routine_id || null,
+          workout_date: copyToDate,
+          day_number: detailWorkout.day_number ?? 1,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+
+      // Copiar los ejercicios
+      if (finalExercises.length && newWorkout) {
+        const copies = finalExercises.map((ex: any) => ({
+          assigned_workout_id: newWorkout.id,
+          exercise_id: ex.exercise_id,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight: ex.weight,
+          order_index: ex.order_index,
+          block_number: ex.block_number,
+          day_number: ex.day_number,
+          rest_seconds: ex.rest_seconds,
+        }));
+        await supabase.from("assigned_workout_exercises").insert(copies);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setCopyToClientOpen(false);
+      setCopyToClient(""); setCopyToDate("");
+      toast.success("Entrenamiento copiado al alumno");
     },
     onError: () => toast.error("Error al copiar"),
   });
@@ -647,14 +720,25 @@ export default function CalendarPage() {
                 initialDay={detailWorkout.day_number ?? 1}
               />
               {role === "coach" && (
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-4 pt-4 border-t border-border flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="flex-1"
                     onClick={() => { setDetailWorkout(detailWorkout); setCopyOpen(true); }}
                   >
                     <Copy className="h-4 w-4 mr-2" />Copiar a otros días
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setCopyToDate(format(new Date(), "yyyy-MM-dd"));
+                      setCopyToClientOpen(true);
+                    }}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />Copiar a otro alumno
                   </Button>
                 </div>
               )}
@@ -704,6 +788,50 @@ export default function CalendarPage() {
               disabled={!copyDays.length}
             >
               Copiar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Copy to client dialog */}
+      <Dialog open={copyToClientOpen} onOpenChange={v => { setCopyToClientOpen(v); if (!v) { setCopyToClient(""); setCopyToDate(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copiar a otro alumno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Se copiará el entrenamiento de <span className="text-foreground font-medium">{detailWorkout?.clients?.name}</span> (
+              {detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM", { locale: es })}) a otro alumno.
+            </p>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Alumno destino</label>
+              <select
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={copyToClient}
+                onChange={e => setCopyToClient(e.target.value)}
+              >
+                <option value="">Seleccionar alumno</option>
+                {clients?.filter(c => c.id !== detailWorkout?.client_id).map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Fecha</label>
+              <input
+                type="date"
+                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                value={copyToDate}
+                onChange={e => setCopyToDate(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!copyToClient || !copyToDate || copyWorkoutToClient.isPending}
+              onClick={() => copyWorkoutToClient.mutate()}
+            >
+              {copyWorkoutToClient.isPending ? "Copiando..." : "Copiar"}
             </Button>
           </div>
         </DialogContent>
