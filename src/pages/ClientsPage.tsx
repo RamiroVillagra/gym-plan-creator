@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addDays, addWeeks, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -23,10 +23,13 @@ export default function ClientsPage() {
 
   const [selectedClient, setSelectedClient] = useState<any>(null);
 
-  // Assign routine dialog
+  // Planificar dialog
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignRoutineId, setAssignRoutineId] = useState("");
-  const [assignDate, setAssignDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [assignDays, setAssignDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
+  const [assignWeeks, setAssignWeeks] = useState("4");
+
+  const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
   // Assign group dialog
   const [groupOpen, setGroupOpen] = useState(false);
@@ -130,21 +133,50 @@ export default function ClientsPage() {
 
   const assignRoutine = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("assigned_workouts").insert({
-        client_id: selectedClient.id,
-        routine_id: assignRoutineId || null,
-        workout_date: assignDate,
+      if (!selectedClient || !assignDays.length) return;
+      const weeks = parseInt(assignWeeks) || 1;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const firstOccurrences = assignDays.map(({ dayOfWeek, routineDay }) => {
+        const thisWeek = addDays(startOfWeek(today, { weekStartsOn: 1 }), dayOfWeek);
+        const firstDate = thisWeek < today ? addWeeks(thisWeek, 1) : thisWeek;
+        return { routineDay, firstDate };
       });
+
+      const inserts: any[] = [];
+      for (const { routineDay, firstDate } of firstOccurrences) {
+        for (let w = 0; w < weeks; w++) {
+          inserts.push({
+            client_id: selectedClient.id,
+            routine_id: assignRoutineId || null,
+            workout_date: format(addWeeks(firstDate, w), "yyyy-MM-dd"),
+            day_number: routineDay,
+          });
+        }
+      }
+      const { error } = await supabase.from("assigned_workouts").insert(inserts);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["client-workouts"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setAssignOpen(false);
-      setAssignRoutineId("");
-      toast.success("Rutina asignada");
+      setAssignRoutineId(""); setAssignDays([]); setAssignWeeks("4");
+      toast.success("Entrenamientos planificados");
     },
+    onError: () => toast.error("Error al planificar"),
   });
+
+  const toggleAssignDay = (dayOfWeek: number) => {
+    setAssignDays(prev => {
+      const exists = prev.find(x => x.dayOfWeek === dayOfWeek);
+      if (exists) return prev.filter(x => x.dayOfWeek !== dayOfWeek);
+      return [...prev, { dayOfWeek, routineDay: 1 }];
+    });
+  };
+  const setAssignRoutineDay = (dayOfWeek: number, routineDay: number) =>
+    setAssignDays(prev => prev.map(x => x.dayOfWeek === dayOfWeek ? { ...x, routineDay } : x));
 
   const removeWorkout = useMutation({
     mutationFn: async (id: string) => {
@@ -313,25 +345,74 @@ export default function ClientsPage() {
           )}
         </div>
 
-        {/* Assign routine dialog */}
-        <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        {/* Planificar dialog */}
+        <Dialog open={assignOpen} onOpenChange={v => { setAssignOpen(v); if (!v) { setAssignRoutineId(""); setAssignDays([]); setAssignWeeks("4"); } }}>
           <DialogContent>
-            <DialogHeader><DialogTitle>Asignar Rutina a {selectedClient.name}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Planificar para {selectedClient.name}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <select
                 className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
                 value={assignRoutineId}
-                onChange={e => setAssignRoutineId(e.target.value)}
+                onChange={e => { setAssignRoutineId(e.target.value); setAssignDays([]); }}
               >
-                <option value="">Seleccionar rutina</option>
-                {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                <option value="">Sin rutina (ejercicios manuales)</option>
+                {routines?.map(r => <option key={r.id} value={r.id}>{r.name}{(r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : ""}</option>)}
               </select>
+
               <div>
-                <label className="text-xs text-muted-foreground">Fecha</label>
-                <Input type="date" value={assignDate} onChange={e => setAssignDate(e.target.value)} />
+                <label className="text-xs text-muted-foreground block mb-2">¿Qué días entrena?</label>
+                <div className="flex gap-1 mb-3">
+                  {dayNames.map((d, i) => {
+                    const isSelected = assignDays.some(x => x.dayOfWeek === i);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => toggleAssignDay(i)}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
+                      >
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(() => {
+                  const totalDays = (routines?.find(r => r.id === assignRoutineId) as any)?.total_days ?? 1;
+                  if (!assignRoutineId || totalDays <= 1 || !assignDays.length) return null;
+                  return (
+                    <div className="space-y-2 border border-border rounded-lg p-3 bg-secondary/20">
+                      <p className="text-xs text-muted-foreground font-medium">¿Qué día de la rutina corresponde a cada día?</p>
+                      {[...assignDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(({ dayOfWeek, routineDay }) => (
+                        <div key={dayOfWeek} className="flex items-center gap-3">
+                          <span className="text-xs font-medium text-foreground w-8">{dayNames[dayOfWeek]}</span>
+                          <div className="flex gap-1 flex-1">
+                            {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                              <button
+                                key={d}
+                                onClick={() => setAssignRoutineDay(dayOfWeek, d)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${routineDay === d ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+                              >
+                                Día {d}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
-              <Button className="w-full" onClick={() => assignRoutine.mutate()} disabled={!assignRoutineId}>
-                Asignar
+
+              <div>
+                <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
+                <Input type="number" min="1" max="52" value={assignWeeks} onChange={e => setAssignWeeks(e.target.value)} className="mt-1" />
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={() => assignRoutine.mutate()}
+                disabled={!assignDays.length || assignRoutine.isPending}
+              >
+                {assignRoutine.isPending ? "Planificando..." : "Planificar"}
               </Button>
             </div>
           </DialogContent>
