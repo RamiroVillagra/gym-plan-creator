@@ -106,6 +106,15 @@ export default function WorkoutPage() {
     },
   });
 
+  const saveNote = useMutation({
+    mutationFn: async ({ workoutId, notes }: { workoutId: string; notes: string }) => {
+      const { error } = await supabase.from("assigned_workouts").update({ notes }).eq("id", workoutId);
+      if (error) throw error;
+    },
+    onSuccess: () => toast.success("Comentario guardado"),
+    onError: () => toast.error("Error al guardar"),
+  });
+
   const logSet = useMutation({
     mutationFn: async (params: {
       assigned_workout_id: string; exercise_id: string;
@@ -211,9 +220,41 @@ export default function WorkoutPage() {
                 </div>
               );
             })}
+            <WorkoutNotes
+              workoutId={workout.id}
+              initialNotes={workout.notes ?? ""}
+              onSave={(notes) => saveNote.mutate({ workoutId: workout.id, notes })}
+            />
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; initialNotes: string; onSave: (notes: string) => void }) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [saved, setSaved] = useState(true);
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Comentarios de la sesión</p>
+      <textarea
+        className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+        rows={3}
+        placeholder="Anotá algo sobre esta sesión: cómo te sentiste, qué ajustar, observaciones..."
+        value={notes}
+        onChange={e => { setNotes(e.target.value); setSaved(false); }}
+      />
+      <div className="flex justify-end mt-2">
+        <button
+          disabled={saved}
+          onClick={() => { onSave(notes); setSaved(true); }}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-default transition-opacity"
+        >
+          {saved ? "Guardado" : "Guardar comentario"}
+        </button>
+      </div>
     </div>
   );
 }
