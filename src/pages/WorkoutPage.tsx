@@ -198,6 +198,7 @@ export default function WorkoutPage() {
                       sets={re.sets}
                       reps={re.reps}
                       weight={re.weight}
+                      setGroups={re.set_groups}
                       assignedWorkoutId={workout.id}
                       exerciseId={re.exercise_id}
                       existingLogs={existingLogs?.filter(
@@ -218,21 +219,27 @@ export default function WorkoutPage() {
 }
 
 function ExerciseCard({
-  exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
+  exercise, sets, reps, weight, setGroups, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
 }: {
   exercise: any; sets: number; reps: number; weight: number | null;
+  setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   prevLogs: any[];
   onLogSet: (params: any) => void;
 }) {
   const [showPrev, setShowPrev] = useState(false);
+
+  // Expandir set_groups en filas individuales
+  const allSets = setGroups?.length
+    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
+    : Array.from({ length: sets }, () => ({ targetReps: reps, targetWeight: weight }));
+
   const [localSets, setLocalSets] = useState<{ reps: string; weightDone: string }[]>(
-    Array.from({ length: sets }, (_, i) => {
+    allSets.map((s, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
-      // Pre-fill with previous session data if no current log
       const prevLog = prevLogs.find((l: any) => l.set_number === i + 1);
       return {
-        reps: log?.reps_done?.toString() ?? reps.toString(),
+        reps: log?.reps_done?.toString() ?? s.targetReps?.toString() ?? "",
         weightDone: log?.weight_used?.toString() ?? prevLog?.weight_used?.toString() ?? "",
       };
     })
@@ -248,7 +255,15 @@ function ExerciseCard({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+          {setGroups?.length ? (
+            <div className="text-right">
+              {setGroups.map((g, i) => (
+                <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}</p>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+          )}
           {prevLogs.length > 0 && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPrev(!showPrev)} title="Ver sesión anterior">
               <History className="h-3.5 w-3.5 text-muted-foreground" />
@@ -294,7 +309,7 @@ function ExerciseCard({
                   setLocalSets(next);
                 }}
               />
-              <span className="text-xs text-muted-foreground w-20 text-center">{weight ? `${weight}kg` : "—"}</span>
+              <span className="text-xs text-muted-foreground w-20 text-center">{allSets[i]?.targetWeight ? `${allSets[i].targetWeight}kg` : "—"}</span>
               <Input
                 type="number"
                 placeholder="Kg"

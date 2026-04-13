@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -43,6 +43,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editWeight, setEditWeight] = useState("");
 
   const [prevOpen, setPrevOpen] = useState(false);
+
+  // Series progresivas (set_groups)
+  const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
+  const [editingGroups, setEditingGroups] = useState<{ sets: string; reps: string; weight: string }[]>([]);
 
   const isOverrideMode = !!assignedWorkoutId;
 
@@ -296,6 +300,53 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     onError: () => toast.error("Error al mover el bloque"),
   });
 
+  const updateSetGroups = useMutation({
+    mutationFn: async ({ id, groups }: { id: string; groups: { sets: string; reps: string; weight: string }[] }) => {
+      const parsed = groups.map(g => ({
+        sets: parseInt(g.sets) || 1,
+        reps: parseInt(g.reps) || 1,
+        weight: g.weight ? parseFloat(g.weight) : null,
+      }));
+      const value = parsed.length ? parsed : null;
+
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        const original = routineExercises?.find((re: any) => re.id === id);
+        if (original) {
+          const { data: cloned } = await supabase
+            .from("assigned_workout_exercises")
+            .select("id")
+            .eq("assigned_workout_id", assignedWorkoutId!)
+            .eq("exercise_id", original.exercise_id)
+            .eq("day_number", original.day_number)
+            .eq("block_number", original.block_number)
+            .eq("order_index", original.order_index)
+            .single();
+          if (cloned) {
+            const { error } = await supabase
+              .from("assigned_workout_exercises")
+              .update({ set_groups: value })
+              .eq("id", cloned.id);
+            if (error) throw error;
+            return;
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return;
+      }
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { error } = await supabase.from(table).update({ set_groups: value }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+      setEditingGroupsId(null);
+      toast.success("Series guardadas");
+    },
+    onError: () => toast.error("Error al guardar series"),
+  });
+
   const createExercise = useMutation({
     mutationFn: async () => {
       const catName = categories?.find(c => c.id === newExCategoryId)?.name ?? null;
@@ -440,19 +491,83 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}
-                              </p>
+                              {re.set_groups?.length ? (
+                                re.set_groups.map((g: any, i: number) => (
+                                  <p key={i} className="text-[10px] text-muted-foreground">
+                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}
+                                  </p>
+                                ))
+                              ) : (
+                                <p className="text-[10px] text-muted-foreground">
+                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}
+                                </p>
+                              )}
                             </button>
                             {editable && (
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteExercise.mutate(re.id)}>
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
+                              <div className="flex items-center gap-0.5">
+                                <Button
+                                  variant="ghost" size="icon" className="h-6 w-6"
+                                  title="Series progresivas"
+                                  onClick={() => {
+                                    if (editingGroupsId === re.id) {
+                                      setEditingGroupsId(null);
+                                    } else {
+                                      const groups = re.set_groups?.length
+                                        ? re.set_groups.map((g: any) => ({ sets: String(g.sets), reps: String(g.reps), weight: g.weight != null ? String(g.weight) : "" }))
+                                        : [{ sets: String(re.sets ?? 3), reps: String(re.reps ?? 10), weight: re.weight != null ? String(re.weight) : "" }];
+                                      setEditingGroups(groups);
+                                      setEditingGroupsId(re.id);
+                                    }
+                                  }}
+                                >
+                                  <Layers className={`h-3 w-3 ${re.set_groups?.length ? "text-primary" : "text-muted-foreground"}`} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteExercise.mutate(re.id)}>
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </div>
                             )}
                           </>
                         )}
                       </div>
-                      {prev && !isEditing && (
+
+                      {/* Editor de series progresivas */}
+                      {editingGroupsId === re.id && !isEditing && (
+                        <div className="mt-2 pt-2 border-t border-border/50 space-y-1.5">
+                          <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Series progresivas</p>
+                          {editingGroups.map((g, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground w-4">{i + 1}.</span>
+                              <Input type="number" className="w-12 h-6 text-xs px-1" value={g.sets} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, sets: e.target.value } : x))} placeholder="S" />
+                              <span className="text-[10px] text-muted-foreground">×</span>
+                              <Input type="number" className="w-12 h-6 text-xs px-1" value={g.reps} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, reps: e.target.value } : x))} placeholder="R" />
+                              <span className="text-[10px] text-muted-foreground">@</span>
+                              <Input type="number" className="w-16 h-6 text-xs px-1" value={g.weight} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))} placeholder="Kg" />
+                              <button onClick={() => setEditingGroups(prev => prev.filter((_, j) => j !== i))} className="text-destructive hover:opacity-70">
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              className="text-[10px] text-primary hover:opacity-70 flex items-center gap-0.5"
+                              onClick={() => setEditingGroups(prev => [...prev, { sets: "2", reps: "8", weight: "" }])}
+                            >
+                              <Plus className="h-3 w-3" /> Agregar grupo
+                            </button>
+                            <div className="flex-1" />
+                            <button className="text-[10px] text-muted-foreground hover:opacity-70" onClick={() => setEditingGroupsId(null)}>Cancelar</button>
+                            <button
+                              className="text-[10px] text-primary font-bold hover:opacity-70"
+                              onClick={() => updateSetGroups.mutate({ id: re.id, groups: editingGroups })}
+                            >
+                              Guardar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {prev && !isEditing && editingGroupsId !== re.id && (
                         <p className="text-[10px] text-accent-foreground/60 mt-0.5">
                           Anterior: {prev.sets}×{prev.reps} @ {prev.weight}kg
                         </p>

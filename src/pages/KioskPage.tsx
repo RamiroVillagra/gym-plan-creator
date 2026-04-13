@@ -351,6 +351,7 @@ export default function KioskPage() {
                           sets={re.sets}
                           reps={re.reps}
                           weight={re.weight}
+                          setGroups={re.set_groups}
                           assignedWorkoutId={workout.id}
                           exerciseId={re.exercise_id}
                           existingLogs={existingLogs?.filter(
@@ -693,40 +694,41 @@ export default function KioskPage() {
 }
  
 function KioskExerciseCard({
-  exercise, sets, reps, weight, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
+  exercise, sets, reps, weight, setGroups, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
 }: {
   exercise: any; sets: number | null; reps: number | null; weight: number | null;
+  setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
 }) {
-  const numSets = sets ?? 1;
-  const defaultReps = reps?.toString() ?? "";
-  const defaultWeight = weight?.toString() ?? "";
- 
+  // Expandir set_groups en filas individuales de series
+  const allSets = setGroups?.length
+    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
+    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: weight }));
+
   const [localSets, setLocalSets] = useState(
-    Array.from({ length: numSets }, (_, i) => {
+    allSets.map((s, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
       return {
-        reps: log?.reps_done?.toString() ?? defaultReps,
-        weight: log?.weight_used?.toString() ?? defaultWeight,
+        reps: log?.reps_done?.toString() ?? s.targetReps?.toString() ?? "",
+        weight: log?.weight_used?.toString() ?? s.targetWeight?.toString() ?? "",
       };
     })
   );
- 
-  const setsLabel = sets ? `${sets}×${reps ?? "?"}` : "";
-  const weightLabel = weight ? ` @ ${weight}kg` : "";
- 
+
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
-          {exercise?.muscle_group && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
-          )}
-        </div>
-        {setsLabel && (
-          <span className="text-xs text-muted-foreground">{setsLabel}{weightLabel}</span>
+      <div className="mb-3">
+        <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+        {exercise?.muscle_group && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
+        )}
+        {setGroups?.length ? (
+          setGroups.map((g, i) => (
+            <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}</p>
+          ))
+        ) : (
+          sets ? <p className="text-xs text-muted-foreground">{sets}×{reps ?? "?"}{weight ? ` @ ${weight}kg` : ""}</p> : null
         )}
       </div>
       <div className="space-y-2">
