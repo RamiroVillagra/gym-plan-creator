@@ -163,7 +163,7 @@ export default function KioskPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, total_days)")
+        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
         .eq("client_id", selectedClient!)
         .eq("workout_date", today);
       if (error) throw error;
@@ -331,10 +331,13 @@ export default function KioskPage() {
           </div>
         ) : (
           todayWorkouts.map((workout: any) => {
-            // Siempre usar ejercicios personalizados del workout (assigned_workout_exercises)
+            // Prioridad: ejercicios propios (modificados), si no hay fallback a rutina base
             const dayNum = workout.day_number ?? 1;
-            const exercises = (assignedExercises ?? [])
+            const workoutAssigned = (assignedExercises ?? [])
               .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
+            const exercises = workoutAssigned.length > 0
+              ? workoutAssigned
+              : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
             return (
               <div key={workout.id} className="space-y-4 mb-6">
