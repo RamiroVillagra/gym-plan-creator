@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const coachNav = [
   { to: "/", label: "Dashboard", icon: Dumbbell },
@@ -22,6 +23,7 @@ const studentNav = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { role, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -82,6 +84,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
           )}
           <button
+            onClick={toggleTheme}
+            title={!sidebarOpen ? (theme === "dark" ? "Modo claro" : "Modo oscuro") : undefined}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors w-full",
+              !sidebarOpen && "justify-center px-2"
+            )}
+          >
+            {theme === "dark"
+              ? <Sun className="h-4 w-4 shrink-0" />
+              : <Moon className="h-4 w-4 shrink-0" />}
+            {sidebarOpen && (theme === "dark" ? "Modo claro" : "Modo oscuro")}
+          </button>
+          <button
             onClick={signOut}
             title={!sidebarOpen ? "Cerrar sesión" : undefined}
             className={cn(
@@ -136,6 +151,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Vista Alumno
               </Link>
             )}
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:text-foreground hover:bg-secondary mt-2"
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+            </button>
             <button
               onClick={() => { setMobileOpen(false); signOut(); }}
               className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:text-foreground hover:bg-secondary mt-2"
