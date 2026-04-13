@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export default function KioskPage() {
   const [pendingManualClient, setPendingManualClient] = useState<{ id: string; name: string } | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const today = format(new Date(), "yyyy-MM-dd");
+  const cardRefs = useRef<Map<string, any>>(new Map());
  
   // --- Gestión de grupos de kiosco ---
   const [newGroupName, setNewGroupName] = useState("");
@@ -288,6 +289,43 @@ export default function KioskPage() {
       toast.success("Serie registrada");
     },
   });
+
+  const logAllSets = useMutation({
+    mutationFn: async () => {
+      const allParams: { assigned_workout_id: string; exercise_id: string; set_number: number; reps_done: number; weight_used: number }[] = [];
+      for (const [, card] of cardRefs.current) {
+        const sets = card.getSets();
+        for (const s of sets) {
+          allParams.push({
+            assigned_workout_id: card.assignedWorkoutId,
+            exercise_id: card.exerciseId,
+            set_number: s.set_number,
+            reps_done: s.reps_done,
+            weight_used: s.weight_used,
+          });
+        }
+      }
+      for (const params of allParams) {
+        const existing = existingLogs?.find(
+          l => l.assigned_workout_id === params.assigned_workout_id &&
+            l.exercise_id === params.exercise_id &&
+            l.set_number === params.set_number
+        );
+        if (existing) {
+          await supabase.from("workout_logs").update({
+            reps_done: params.reps_done, weight_used: params.weight_used, completed: true,
+          }).eq("id", existing.id);
+        } else {
+          await supabase.from("workout_logs").insert({ ...params, completed: true });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
+      toast.success("¡Sesión guardada completa!");
+    },
+    onError: () => toast.error("Error al guardar la sesión"),
+  });
  
   const groupClientIds = groupMembers?.map((m: any) => m.clients.id) ?? [];
   const allKioskClients = [
@@ -367,6 +405,11 @@ export default function KioskPage() {
                         {blockExercises.map((re: any) => (
                           <KioskExerciseCard
                             key={re.id}
+                            ref={(el: any) => {
+                              const key = `${workout.id}-${re.exercise_id}`;
+                              if (el) cardRefs.current.set(key, el);
+                              else cardRefs.current.delete(key);
+                            }}
                             exercise={re.exercises}
                             sets={re.sets}
                             reps={re.reps}
@@ -384,6 +427,14 @@ export default function KioskPage() {
                     </div>
                   );
                 })}
+                <button
+                  onClick={() => logAllSets.mutate()}
+                  disabled={logAllSets.isPending}
+                  className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base tracking-wide shadow-md hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="h-5 w-5" />
+                  {logAllSets.isPending ? "Guardando..." : "Guardar sesión completa"}
+                </button>
                 <WorkoutNotes
                   workoutId={workout.id}
                   initialNotes={workout.notes ?? ""}
@@ -746,14 +797,14 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
   );
 }
 
-function KioskExerciseCard({
+const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   exercise, sets, reps, weight, setGroups, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
 }: {
   exercise: any; sets: number | null; reps: number | null; weight: number | null;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
-}) {
+}, ref: any) {
   // Expandir set_groups en filas individuales de series
   const allSets = setGroups?.length
     ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
@@ -768,6 +819,16 @@ function KioskExerciseCard({
       };
     })
   );
+
+  useImperativeHandle(ref, () => ({
+    assignedWorkoutId,
+    exerciseId,
+    getSets: () => localSets.map((s, i) => ({
+      set_number: i + 1,
+      reps_done: parseInt(s.reps) || 0,
+      weight_used: parseFloat(s.weight) || 0,
+    })),
+  }));
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
@@ -806,5 +867,5 @@ function KioskExerciseCard({
       </div>
     </div>
   );
-}
+});
 
