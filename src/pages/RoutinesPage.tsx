@@ -123,7 +123,9 @@ export default function RoutinesPage() {
 
   const deleteRoutine = useMutation({
     mutationFn: async (id: string) => {
-      // Borrar ejercicios de la rutina primero
+      // Desvincular workouts asignados (mantenerlos pero sin referencia a esta rutina)
+      await supabase.from("assigned_workouts").update({ routine_id: null }).eq("routine_id", id);
+      // Borrar ejercicios de la rutina
       await supabase.from("routine_exercises").delete().eq("routine_id", id);
       // Borrar la rutina
       const { error } = await supabase.from("routines").delete().eq("id", id);
