@@ -297,7 +297,7 @@ export default function KioskPage() {
  
   const filteredSearch = allClients?.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) &&
-    !allKioskClients.some(k => k.id === c.id)
+    !manualClients.some(k => k.id === c.id)
   ) ?? [];
  
   const managingMemberIds = managingGroupMembers?.map((m: any) => m.client_id) ?? [];
