@@ -123,6 +123,9 @@ export default function RoutinesPage() {
 
   const deleteRoutine = useMutation({
     mutationFn: async (id: string) => {
+      // Borrar ejercicios de la rutina primero
+      await supabase.from("routine_exercises").delete().eq("routine_id", id);
+      // Borrar la rutina
       const { error } = await supabase.from("routines").delete().eq("id", id);
       if (error) throw error;
     },
@@ -130,6 +133,7 @@ export default function RoutinesPage() {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
       toast.success("Rutina eliminada");
     },
+    onError: (err: any) => toast.error(`Error al eliminar: ${err.message ?? "intenta de nuevo"}`),
   });
 
   const filteredRoutines = activeFolder
