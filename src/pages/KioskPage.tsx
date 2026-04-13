@@ -352,26 +352,35 @@ export default function KioskPage() {
                 {blocks.map((blockNum: number) => {
                   const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);
                   return (
-                    <div key={blockNum}>
+                    <div key={blockNum} className="rounded-2xl border-2 border-primary/20 bg-card overflow-hidden shadow-sm">
                       {blocks.length > 1 && (
-                        <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque {blockNum}</p>
+                        <div className="flex items-center gap-3 px-4 py-3 bg-primary/10 border-b-2 border-primary/20">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm shrink-0">
+                            {blockNum}
+                          </div>
+                          <span className="text-base font-bold text-primary uppercase tracking-widest">
+                            Bloque {blockNum}
+                          </span>
+                        </div>
                       )}
-                      {blockExercises.map((re: any) => (
-                        <KioskExerciseCard
-                          key={re.id}
-                          exercise={re.exercises}
-                          sets={re.sets}
-                          reps={re.reps}
-                          weight={re.weight}
-                          setGroups={re.set_groups}
-                          assignedWorkoutId={workout.id}
-                          exerciseId={re.exercise_id}
-                          existingLogs={existingLogs?.filter(
-                            (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
-                          ) ?? []}
-                          onLogSet={logSet.mutate}
-                        />
-                      ))}
+                      <div className="p-3 space-y-2">
+                        {blockExercises.map((re: any) => (
+                          <KioskExerciseCard
+                            key={re.id}
+                            exercise={re.exercises}
+                            sets={re.sets}
+                            reps={re.reps}
+                            weight={re.weight}
+                            setGroups={re.set_groups}
+                            assignedWorkoutId={workout.id}
+                            exerciseId={re.exercise_id}
+                            existingLogs={existingLogs?.filter(
+                              (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
+                            ) ?? []}
+                            onLogSet={logSet.mutate}
+                          />
+                        ))}
+                      </div>
                     </div>
                   );
                 })}
