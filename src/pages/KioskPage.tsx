@@ -482,15 +482,36 @@ export default function KioskPage() {
  
       {searchOpen && (
         <div className="mb-6 bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-foreground">Buscar alumno</p>
-            <button onClick={() => { setSearchOpen(false); setClientSearch(""); }}>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Agregar alumnos a la sesión</p>
+              <p className="text-xs text-muted-foreground">Podés agregar varios uno por uno</p>
+            </div>
+            <button onClick={() => { setSearchOpen(false); setClientSearch(""); setPendingManualClient(null); setWeekOffset(0); }}>
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
+
+          {/* Alumnos ya agregados en esta sesión */}
+          {manualClients.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3 pb-3 border-b border-border">
+              {manualClients.map(c => (
+                <span key={c.id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                  {c.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nombre..." className="pl-10" value={clientSearch} onChange={e => setClientSearch(e.target.value)} />
+            <Input
+              placeholder="Escribí el nombre del alumno..."
+              className="pl-10"
+              value={clientSearch}
+              onChange={e => setClientSearch(e.target.value)}
+              autoFocus
+            />
           </div>
           {clientSearch && !pendingManualClient && (
             <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -568,7 +589,7 @@ export default function KioskPage() {
                           toast.success(`${pendingManualClient.name} — "${routineName}" asignado para hoy`);
                           setPendingManualClient(null);
                           setWeekOffset(0);
-                          setSearchOpen(false);
+                          setClientSearch("");
                         } catch {
                           toast.error("Error al asignar el entrenamiento");
                         }
@@ -618,7 +639,7 @@ export default function KioskPage() {
                     toast.success(`${pendingManualClient.name} agregado sin entrenamiento`);
                     setPendingManualClient(null);
                     setWeekOffset(0);
-                    setSearchOpen(false);
+                    setClientSearch("");
                   }}
                 >
                   Sin entrenamiento
