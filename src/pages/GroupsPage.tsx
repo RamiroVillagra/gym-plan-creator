@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, ChevronDown, ChevronUp, Users, CalendarDays } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, Users, CalendarDays, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -22,6 +22,8 @@ export default function GroupsPage() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [addMemberGroupId, setAddMemberGroupId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [addedInSession, setAddedInSession] = useState<{ id: string; name: string }[]>([]);
   
   // Bulk assign state
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
@@ -85,16 +87,18 @@ export default function GroupsPage() {
   });
 
   const addMember = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ clientId, clientName }: { clientId: string; clientName: string }) => {
       const { error } = await supabase.from("group_members").insert({
-        group_id: addMemberGroupId!, client_id: selectedClientId,
+        group_id: addMemberGroupId!, client_id: clientId,
       });
       if (error) throw error;
+      return clientName;
     },
-    onSuccess: () => {
+    onSuccess: (clientName) => {
       queryClient.invalidateQueries({ queryKey: ["group-members"] });
-      setSelectedClientId(""); setAddMemberOpen(false);
-      toast.success("Alumno agregado al grupo");
+      setMemberSearch("");
+      setAddedInSession(prev => [...prev, { id: selectedClientId, name: clientName }]);
+      toast.success(`${clientName} agregado`);
     },
     onError: () => toast.error("Error al agregar alumno"),
   });
@@ -208,6 +212,8 @@ export default function GroupsPage() {
                   <Button variant="ghost" size="sm" onClick={() => {
                     setAddMemberGroupId(group.id);
                     setExpandedGroup(group.id);
+                    setMemberSearch("");
+                    setAddedInSession([]);
                     setAddMemberOpen(true);
                   }}>
                     <Plus className="h-4 w-4" />
@@ -240,19 +246,81 @@ export default function GroupsPage() {
       )}
 
       {/* Add member dialog */}
-      <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
+      <Dialog open={addMemberOpen} onOpenChange={(o) => { setAddMemberOpen(o); if (!o) setMemberSearch(""); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Agregar Alumno al Grupo</DialogTitle></DialogHeader>
-          <div className="space-y-4 mt-4">
-            <select
-              className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-              value={selectedClientId}
-              onChange={e => setSelectedClientId(e.target.value)}
+          <DialogHeader><DialogTitle>Agregar alumnos al grupo</DialogTitle></DialogHeader>
+          <div className="mt-2 space-y-4">
+
+            {/* Alumnos agregados en esta sesión */}
+            {addedInSession.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pb-3 border-b border-border">
+                {addedInSession.map(c => (
+                  <span key={c.id} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-medium">
+                    {c.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Buscador por texto */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Escribí el nombre del alumno..."
+                className="pl-10"
+                value={memberSearch}
+                onChange={e => setMemberSearch(e.target.value)}
+                autoFocus
+              />
+              {memberSearch && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  onClick={() => setMemberSearch("")}
+                >
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              )}
+            </div>
+
+            {/* Resultados */}
+            {memberSearch && (
+              <div className="space-y-1 max-h-56 overflow-y-auto -mt-1">
+                {availableClients
+                  ?.filter(c =>
+                    c.name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+                    !addedInSession.some(a => a.id === c.id)
+                  )
+                  .map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedClientId(c.id);
+                        addMember.mutate({ clientId: c.id, clientName: c.name });
+                      }}
+                      disabled={addMember.isPending}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-secondary/60 text-sm text-foreground transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
+                      {c.name}
+                    </button>
+                  ))
+                }
+                {availableClients?.filter(c =>
+                  c.name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+                  !addedInSession.some(a => a.id === c.id)
+                ).length === 0 && (
+                  <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados.</p>
+                )}
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => { setAddMemberOpen(false); setMemberSearch(""); }}
             >
-              <option value="">Seleccionar alumno</option>
-              {availableClients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <Button className="w-full" onClick={() => addMember.mutate()} disabled={!selectedClientId}>Agregar</Button>
+              Listo
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
