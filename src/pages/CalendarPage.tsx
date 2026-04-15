@@ -555,7 +555,7 @@ export default function CalendarPage() {
           workouts={workouts?.filter((w: any) => w.workout_date === format(currentDate, "yyyy-MM-dd")) ?? []}
           role={role}
           isClientFiltered={isClientFiltered}
-          onAdd={() => { setSelectedDate(currentDate); setAssignOpen(true); }}
+          onAdd={() => { setSelectedDate(currentDate); setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1"); setAssignOpen(true); }}
           onDelete={(id) => deleteWorkout.mutate(id)}
           onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}
           onViewDetail={(w) => setDetailWorkout(w)}
@@ -583,6 +583,7 @@ export default function CalendarPage() {
                   onClick={() => {
                     if (role === "coach") {
                       setSelectedDate(day);
+                      setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1");
                       setAssignOpen(true);
                     }
                   }}

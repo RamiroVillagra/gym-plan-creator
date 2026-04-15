@@ -130,6 +130,11 @@ export default function KioskPage() {
         }
       }
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["kiosk-assigned-exercises"] });
+      queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
+    },
   });
  
   const { data: groupMembers } = useQuery({

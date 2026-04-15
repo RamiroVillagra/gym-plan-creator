@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:gym-plan-creator.vercel.app)"
+      "WebFetch(domain:gym-plan-creator.vercel.app)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

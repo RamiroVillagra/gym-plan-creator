@@ -159,7 +159,7 @@ export default function ClientsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["client-workouts", selectedClient?.id] });
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setAssignOpen(false);
       setAssignRoutineId(""); setAssignDays([]); setAssignWeeks("4");
@@ -184,7 +184,7 @@ export default function ClientsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["client-workouts", selectedClient?.id] });
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       toast.success("Entrenamiento eliminado");
     },
@@ -199,7 +199,7 @@ export default function ClientsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["client-groups", selectedClient?.id] });
       queryClient.invalidateQueries({ queryKey: ["group-members"] });
       setGroupOpen(false);
       setAssignGroupId("");
@@ -214,7 +214,7 @@ export default function ClientsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["client-groups", selectedClient?.id] });
       toast.success("Removido del grupo");
     },
   });

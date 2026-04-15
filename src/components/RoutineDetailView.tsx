@@ -108,7 +108,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   }, [isOverrideMode, hasOverrides, baseExercises, assignedWorkoutId, queryClient]);
 
   const { data: previousLogs } = useQuery({
-    queryKey: ["previous-logs", clientId, routineId],
+    queryKey: ["previous-logs", clientId, routineId, initialDay],
     enabled: !!clientId && !!assignedWorkoutId,
     queryFn: async () => {
       const { data: prevWorkouts } = await supabase
@@ -116,6 +116,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         .select("id, workout_date")
         .eq("client_id", clientId!)
         .eq("routine_id", routineId)
+        .eq("day_number", initialDay)
         .neq("id", assignedWorkoutId!)
         .order("workout_date", { ascending: false })
         .limit(1);
@@ -290,7 +291,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         .filter((re: any) => re.block_number === blockB && re.day_number === selectedDay)
         .map((re: any) => re.id);
 
-      if (idsA.length) await supabase.from(table).update({ block_number: 9999 }).in("id", idsA);
+      const maxBlock = Math.max(...(routineExercises ?? []).map((re: any) => re.block_number ?? 1)) + 1;
+      if (idsA.length) await supabase.from(table).update({ block_number: maxBlock }).in("id", idsA);
       if (idsB.length) await supabase.from(table).update({ block_number: blockA }).in("id", idsB);
       if (idsA.length) await supabase.from(table).update({ block_number: blockB }).in("id", idsA);
     },
