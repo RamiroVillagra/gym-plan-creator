@@ -5,11 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  format, addDays, addWeeks, addMonths, startOfWeek, startOfMonth, endOfMonth,
+  format, addDays, addWeeks, addMonths, startOfWeek, startOfMonth, endOfMonth, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, History, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, History, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -54,7 +54,10 @@ export default function CalendarPage() {
   // Copy to client dialog (otro alumno)
   const [copyToClientOpen, setCopyToClientOpen] = useState(false);
   const [copyToClient, setCopyToClient] = useState("");
+  const [copyToClientName, setCopyToClientName] = useState("");
+  const [copyToClientSearch, setCopyToClientSearch] = useState("");
   const [copyToDate, setCopyToDate] = useState("");
+  const [copyToWeekOffset, setCopyToWeekOffset] = useState(0);
 
   // Bulk assign dialog
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -935,44 +938,124 @@ export default function CalendarPage() {
       </Dialog>
 
       {/* Copy to client dialog */}
-      <Dialog open={copyToClientOpen} onOpenChange={v => { setCopyToClientOpen(v); if (!v) { setCopyToClient(""); setCopyToDate(""); } }}>
+      <Dialog open={copyToClientOpen} onOpenChange={v => {
+        setCopyToClientOpen(v);
+        if (!v) { setCopyToClient(""); setCopyToClientName(""); setCopyToClientSearch(""); setCopyToDate(""); setCopyToWeekOffset(0); }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Copiar a otro alumno</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">
-              Se copiará el entrenamiento de <span className="text-foreground font-medium">{detailWorkout?.clients?.name}</span> (
-              {detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM", { locale: es })}) a otro alumno.
+            <p className="text-xs text-muted-foreground">
+              Entrenamiento de <span className="text-foreground font-medium">{detailWorkout?.clients?.name}</span>{" "}
+              ({detailWorkout && format(new Date(detailWorkout.workout_date + "T12:00:00"), "d MMM", { locale: es })})
             </p>
+
+            {/* Buscador de alumno */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Alumno destino</label>
-              <select
-                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                value={copyToClient}
-                onChange={e => setCopyToClient(e.target.value)}
-              >
-                <option value="">Seleccionar alumno</option>
-                {clients?.filter(c => c.id !== detailWorkout?.client_id).map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              {copyToClient ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                  <span className="text-sm font-medium text-primary">{copyToClientName}</span>
+                  <button onClick={() => { setCopyToClient(""); setCopyToClientName(""); setCopyToClientSearch(""); }}>
+                    <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Escribí el nombre..."
+                    className="pl-10"
+                    value={copyToClientSearch}
+                    onChange={e => setCopyToClientSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              )}
+              {!copyToClient && copyToClientSearch && (
+                <div className="mt-1 space-y-0.5 max-h-40 overflow-y-auto border border-border rounded-lg bg-card p-1">
+                  {clients
+                    ?.filter(c => c.id !== detailWorkout?.client_id && c.name.toLowerCase().includes(copyToClientSearch.toLowerCase()))
+                    .map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => { setCopyToClient(c.id); setCopyToClientName(c.name); setCopyToClientSearch(""); }}
+                        className="w-full text-left px-3 py-2 rounded-md hover:bg-secondary/60 text-sm text-foreground transition-colors"
+                      >
+                        {c.name}
+                      </button>
+                    ))
+                  }
+                  {!clients?.filter(c => c.id !== detailWorkout?.client_id && c.name.toLowerCase().includes(copyToClientSearch.toLowerCase())).length && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados.</p>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Selector de día semanal */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Fecha</label>
-              <input
-                type="date"
-                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                value={copyToDate}
-                onChange={e => setCopyToDate(e.target.value)}
-              />
+              <label className="text-xs text-muted-foreground block mb-2">Día destino</label>
+              {(() => {
+                const base = addWeeks(new Date(), copyToWeekOffset);
+                const wStart = startOfWeek(base, { weekStartsOn: 1 });
+                const wEnd = endOfWeek(base, { weekStartsOn: 1 });
+                const days = eachDayOfInterval({ start: wStart, end: wEnd });
+                const today = format(new Date(), "yyyy-MM-dd");
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <button onClick={() => setCopyToWeekOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                        <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {format(wStart, "d MMM", { locale: es })} — {format(wEnd, "d MMM yyyy", { locale: es })}
+                      </span>
+                      <button onClick={() => setCopyToWeekOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-secondary/60 transition-colors">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {days.map(day => {
+                        const dateStr = format(day, "yyyy-MM-dd");
+                        const isSelected = copyToDate === dateStr;
+                        const isToday = dateStr === today;
+                        return (
+                          <button
+                            key={dateStr}
+                            onClick={() => setCopyToDate(dateStr)}
+                            className={`flex flex-col items-center py-2 rounded-xl text-xs font-medium transition-all border
+                              ${isSelected
+                                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                                : isToday
+                                  ? "bg-primary/10 text-primary border-primary/30"
+                                  : "bg-card text-muted-foreground border-border hover:bg-secondary/50 hover:text-foreground"
+                              }`}
+                          >
+                            <span className="uppercase text-[10px] font-bold">{format(day, "EEE", { locale: es }).slice(0, 2)}</span>
+                            <span className="text-base font-bold mt-0.5">{format(day, "d")}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {copyToDate && (
+                      <p className="text-xs text-center text-primary mt-2 font-medium">
+                        {format(new Date(copyToDate + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
+
             <Button
               className="w-full"
               disabled={!copyToClient || !copyToDate || copyWorkoutToClient.isPending}
               onClick={() => copyWorkoutToClient.mutate()}
             >
-              {copyWorkoutToClient.isPending ? "Copiando..." : "Copiar"}
+              {copyWorkoutToClient.isPending ? "Copiando..." : "Copiar entrenamiento"}
             </Button>
           </div>
         </DialogContent>
