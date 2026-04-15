@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -10,7 +11,12 @@ import {
 
 export default function StatsPage() {
   const [selectedClient, setSelectedClient] = useState("");
+  const [selectedClientName, setSelectedClientName] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
+
   const [selectedExercise, setSelectedExercise] = useState("");
+  const [selectedExerciseName, setSelectedExerciseName] = useState("");
+  const [exerciseSearch, setExerciseSearch] = useState("");
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
@@ -69,8 +75,8 @@ export default function StatsPage() {
     }, {})
   ).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
-  const clientName = clients?.find(c => c.id === selectedClient)?.name;
-  const exerciseName = exercises?.find(e => e.id === selectedExercise)?.name;
+  const clientName = selectedClientName;
+  const exerciseName = selectedExerciseName;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -81,29 +87,86 @@ export default function StatsPage() {
 
       {/* Selectores */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+
+        {/* Buscador cliente */}
         <div>
           <label className="text-sm text-muted-foreground block mb-2">Cliente</label>
-          <select
-            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-            value={selectedClient}
-            onChange={e => { setSelectedClient(e.target.value); setSelectedExercise(""); }}
-          >
-            <option value="">Elegir cliente</option>
-            {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          {selectedClient ? (
+            <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
+              <span className="text-sm font-medium text-primary">{selectedClientName}</span>
+              <button onClick={() => { setSelectedClient(""); setSelectedClientName(""); setClientSearch(""); setSelectedExercise(""); setSelectedExerciseName(""); setExerciseSearch(""); }}>
+                <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Escribí el nombre..."
+                className="pl-10"
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {!selectedClient && clientSearch && (
+            <div className="mt-1 border border-border rounded-lg bg-card overflow-hidden max-h-48 overflow-y-auto">
+              {clients?.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => { setSelectedClient(c.id); setSelectedClientName(c.name); setClientSearch(""); }}
+                  className="w-full text-left px-3 py-2.5 hover:bg-secondary/60 text-sm text-foreground border-b border-border/40 last:border-0 transition-colors"
+                >
+                  {c.name}
+                </button>
+              ))}
+              {!clients?.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).length && (
+                <p className="text-xs text-muted-foreground px-3 py-2.5">Sin resultados.</p>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Buscador ejercicio */}
         <div>
           <label className="text-sm text-muted-foreground block mb-2">Ejercicio</label>
-          <select
-            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-            value={selectedExercise}
-            onChange={e => setSelectedExercise(e.target.value)}
-            disabled={!selectedClient}
-          >
-            <option value="">Elegir ejercicio</option>
-            {exercises?.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-          </select>
+          {selectedExercise ? (
+            <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
+              <span className="text-sm font-medium text-primary">{selectedExerciseName}</span>
+              <button onClick={() => { setSelectedExercise(""); setSelectedExerciseName(""); setExerciseSearch(""); }}>
+                <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={selectedClient ? "Escribí el ejercicio..." : "Primero elegí un cliente"}
+                className="pl-10"
+                value={exerciseSearch}
+                onChange={e => setExerciseSearch(e.target.value)}
+                disabled={!selectedClient}
+              />
+            </div>
+          )}
+          {!selectedExercise && exerciseSearch && selectedClient && (
+            <div className="mt-1 border border-border rounded-lg bg-card overflow-hidden max-h-48 overflow-y-auto">
+              {exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase())).map(e => (
+                <button
+                  key={e.id}
+                  onClick={() => { setSelectedExercise(e.id); setSelectedExerciseName(e.name); setExerciseSearch(""); }}
+                  className="w-full text-left px-3 py-2.5 hover:bg-secondary/60 text-sm text-foreground border-b border-border/40 last:border-0 transition-colors"
+                >
+                  {e.name}
+                </button>
+              ))}
+              {!exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase())).length && (
+                <p className="text-xs text-muted-foreground px-3 py-2.5">Sin resultados.</p>
+              )}
+            </div>
+          )}
         </div>
+
       </div>
 
       {/* Contenido */}
