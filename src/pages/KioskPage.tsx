@@ -66,7 +66,7 @@ export default function KioskPage() {
   });
 
   const assignWorkoutToday = useMutation({
-    mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string; dayNumber: number; sourceWorkoutId: string }) => {
+    mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string | null; dayNumber: number; sourceWorkoutId: string }) => {
       // Borrar cualquier workout existente para hoy (evita duplicados)
       await supabase.from("assigned_workouts")
         .delete()
@@ -545,15 +545,15 @@ export default function KioskPage() {
               {!pendingClientAllWorkouts ? (
                 <p className="text-xs text-muted-foreground text-center py-3">Cargando...</p>
               ) : (() => {
-                const workoutsWithRoutine = pendingClientAllWorkouts.filter(
-                  w => !!(w as any).routines?.id && w.workout_date !== today
+                const allWorkouts = pendingClientAllWorkouts.filter(
+                  w => w.workout_date !== today
                 );
-                if (!workoutsWithRoutine.length) {
+                if (!allWorkouts.length) {
                   return <p className="text-xs text-muted-foreground text-center py-3">No hay entrenamientos planificados.</p>;
                 }
                 // Separar pasados y próximos
-                const upcoming = workoutsWithRoutine.filter(w => w.workout_date > today);
-                const past = workoutsWithRoutine.filter(w => w.workout_date < today);
+                const upcoming = allWorkouts.filter(w => w.workout_date > today);
+                const past = allWorkouts.filter(w => w.workout_date < today);
                 const renderItem = (w: any) => {
                   const dateObj = new Date(w.workout_date + "T12:00:00");
                   const isPast = w.workout_date < today;
@@ -565,13 +565,14 @@ export default function KioskPage() {
                         try {
                           await assignWorkoutToday.mutateAsync({
                             clientId: pendingManualClient.id,
-                            routineId: (w as any).routines.id,
+                            routineId: (w as any).routines?.id ?? null,
                             dayNumber: (w as any).day_number ?? 1,
                             sourceWorkoutId: w.id,
                           });
                           setManualClients(prev => [...prev, pendingManualClient]);
                           queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
-                          toast.success(`${pendingManualClient.name} — "${(w as any).routines.name}" asignado para hoy`);
+                          const label = (w as any).routines?.name ?? "Entrenamiento libre";
+                          toast.success(`${pendingManualClient.name} — "${label}" asignado para hoy`);
                           setPendingManualClient(null);
                           setClientSearch("");
                         } catch {
@@ -582,7 +583,7 @@ export default function KioskPage() {
                     >
                       <div>
                         <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                          {(w as any).routines?.name}
+                          {(w as any).routines?.name ?? "Entrenamiento libre"}
                           {((w as any).routines?.total_days ?? 1) > 1 && (
                             <span className="text-xs text-muted-foreground ml-1">— Día {(w as any).day_number ?? 1}</span>
                           )}
