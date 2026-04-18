@@ -96,6 +96,7 @@ export default function KioskPage() {
           sets: ex.sets,
           reps: ex.reps,
           weight: ex.weight,
+          unit: ex.unit ?? 'kg',
           order_index: ex.order_index,
           block_number: ex.block_number,
           day_number: ex.day_number,
@@ -116,6 +117,7 @@ export default function KioskPage() {
             sets: ex.sets,
             reps: ex.reps,
             weight: ex.weight,
+            unit: ex.unit ?? 'kg',
             order_index: ex.order_index,
             block_number: ex.block_number,
             day_number: ex.day_number,
@@ -414,6 +416,7 @@ export default function KioskPage() {
                             sets={re.sets}
                             reps={re.reps}
                             weight={re.weight}
+                            unit={re.unit ?? "kg"}
                             setGroups={re.set_groups}
                             assignedWorkoutId={workout.id}
                             exerciseId={re.exercise_id}
@@ -805,9 +808,9 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const KioskExerciseCard = forwardRef(function KioskExerciseCard({
-  exercise, sets, reps, weight, setGroups, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", setGroups, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
 }: {
-  exercise: any; sets: number | null; reps: number | null; weight: number | null;
+  exercise: any; sets: number | null; reps: number | null; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
@@ -846,10 +849,10 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         )}
         {setGroups?.length ? (
           setGroups.map((g, i) => (
-            <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}</p>
+            <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${unit}` : ""}</p>
           ))
         ) : (
-          sets ? <p className="text-xs text-muted-foreground">{sets}×{reps ?? "?"}{weight ? ` @ ${weight}kg` : ""}</p> : null
+          sets ? <p className="text-xs text-muted-foreground">{sets}×{reps ?? "?"}{weight ? ` @ ${weight}${unit}` : ""}</p> : null
         )}
       </div>
       <div className="space-y-2">
@@ -860,7 +863,7 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
               <Input type="number" placeholder="Reps" className="w-20 h-8 text-sm" value={s.reps}
                 onChange={e => { const n = [...localSets]; n[i].reps = e.target.value; setLocalSets(n); }} />
-              <Input type="number" placeholder="Kg" className="w-20 h-8 text-sm" value={s.weight}
+              <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
                 onChange={e => { const n = [...localSets]; n[i].weight = e.target.value; setLocalSets(n); }} />
               <button onClick={() => onLogSet({
                 assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId,

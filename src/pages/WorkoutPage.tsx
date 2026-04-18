@@ -210,6 +210,7 @@ export default function WorkoutPage() {
                       sets={re.sets}
                       reps={re.reps}
                       weight={re.weight}
+                      unit={re.unit ?? "kg"}
                       setGroups={re.set_groups}
                       assignedWorkoutId={workout.id}
                       exerciseId={re.exercise_id}
@@ -263,9 +264,9 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 function ExerciseCard({
-  exercise, sets, reps, weight, setGroups, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
+  exercise, sets, reps, weight, unit = "kg", setGroups, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
 }: {
-  exercise: any; sets: number; reps: number; weight: number | null;
+  exercise: any; sets: number; reps: number; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   prevLogs: any[];
@@ -302,11 +303,11 @@ function ExerciseCard({
           {setGroups?.length ? (
             <div className="text-right">
               {setGroups.map((g, i) => (
-                <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}</p>
+                <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${unit}` : ""}</p>
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}kg` : ""}</span>
+            <span className="text-xs text-muted-foreground">{sets}×{reps} {weight ? `@ ${weight}${unit}` : ""}</span>
           )}
           {prevLogs.length > 0 && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPrev(!showPrev)} title="Ver sesión anterior">
@@ -322,7 +323,7 @@ function ExerciseCard({
           <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Sesión anterior</p>
           {prevLogs.sort((a, b) => a.set_number - b.set_number).map((l: any) => (
             <p key={l.id} className="text-[10px] text-muted-foreground">
-              Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}kg
+              Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}{unit}
             </p>
           ))}
         </div>
@@ -353,10 +354,10 @@ function ExerciseCard({
                   setLocalSets(next);
                 }}
               />
-              <span className="text-xs text-muted-foreground w-20 text-center">{allSets[i]?.targetWeight ? `${allSets[i].targetWeight}kg` : "—"}</span>
+              <span className="text-xs text-muted-foreground w-20 text-center">{allSets[i]?.targetWeight ? `${allSets[i].targetWeight}${unit}` : "—"}</span>
               <Input
                 type="number"
-                placeholder="Kg"
+                placeholder={unit}
                 className="w-20 h-8 text-sm"
                 value={s.weightDone}
                 onChange={e => {

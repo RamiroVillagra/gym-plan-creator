@@ -41,6 +41,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editSets, setEditSets] = useState("");
   const [editReps, setEditReps] = useState("");
   const [editWeight, setEditWeight] = useState("");
+  const [editUnit, setEditUnit] = useState("kg");
 
   const [prevOpen, setPrevOpen] = useState(false);
 
@@ -95,6 +96,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       sets: re.sets,
       reps: re.reps,
       weight: re.weight,
+      unit: re.unit ?? 'kg',
       order_index: re.order_index,
       block_number: re.block_number,
       day_number: re.day_number,
@@ -232,7 +234,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateExercise = useMutation({
-    mutationFn: async ({ id, sets, reps, weight }: { id: string; sets: number; reps: number; weight: number | null }) => {
+    mutationFn: async ({ id, sets, reps, weight, unit }: { id: string; sets: number; reps: number; weight: number | null; unit: string }) => {
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
         const original = routineExercises?.find((re: any) => re.id === id);
@@ -249,7 +251,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           if (cloned) {
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ sets, reps, weight })
+              .update({ sets, reps, weight, unit })
               .eq("id", cloned.id);
             if (error) throw error;
             return;
@@ -261,7 +263,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       }
 
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
-      const { error } = await supabase.from(table).update({ sets, reps, weight }).eq("id", id);
+      const { error } = await supabase.from(table).update({ sets, reps, weight, unit }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -461,24 +463,35 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                     <div key={re.id} className="bg-secondary/50 rounded-lg px-3 py-1.5">
                       <div className="flex items-center justify-between">
                         {isEditing ? (
-                          <div className="flex items-center gap-2 flex-1">
-                            <p className="text-xs font-medium text-foreground min-w-[80px]">{re.exercises?.name}</p>
-                            <Input type="number" className="w-14 h-7 text-xs" value={editSets} onChange={e => setEditSets(e.target.value)} placeholder="S" />
-                            <span className="text-xs text-muted-foreground">×</span>
-                            <Input type="number" className="w-14 h-7 text-xs" value={editReps} onChange={e => setEditReps(e.target.value)} placeholder="R" />
-                            <span className="text-xs text-muted-foreground">@</span>
-                            <Input type="number" className="w-16 h-7 text-xs" value={editWeight} onChange={e => setEditWeight(e.target.value)} placeholder="Kg" />
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateExercise.mutate({
-                              id: re.id,
-                              sets: parseInt(editSets) || 1,
-                              reps: parseInt(editReps) || 1,
-                              weight: editWeight ? parseFloat(editWeight) : null,
-                            })}>
-                              <Save className="h-3 w-3 text-primary" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingId(null)}>
-                              <span className="text-xs text-muted-foreground">✕</span>
-                            </Button>
+                          <div className="flex flex-col gap-1.5 flex-1">
+                            <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Input type="number" className="w-14 h-7 text-xs" value={editSets} onChange={e => setEditSets(e.target.value)} placeholder="S" />
+                              <span className="text-xs text-muted-foreground">×</span>
+                              <Input type="number" className="w-14 h-7 text-xs" value={editReps} onChange={e => setEditReps(e.target.value)} placeholder="R" />
+                              <span className="text-xs text-muted-foreground">@</span>
+                              <Input type="number" className="w-16 h-7 text-xs" value={editWeight} onChange={e => setEditWeight(e.target.value)} placeholder="0" />
+                              <div className="flex rounded-md border border-input overflow-hidden h-7">
+                                {["kg", "seg", "m"].map(u => (
+                                  <button key={u} type="button" onClick={() => setEditUnit(u)}
+                                    className={`px-2 text-xs font-medium transition-colors ${editUnit === u ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-secondary"}`}>
+                                    {u}
+                                  </button>
+                                ))}
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateExercise.mutate({
+                                id: re.id,
+                                sets: parseInt(editSets) || 1,
+                                reps: parseInt(editReps) || 1,
+                                weight: editWeight ? parseFloat(editWeight) : null,
+                                unit: editUnit,
+                              })}>
+                                <Save className="h-3 w-3 text-primary" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingId(null)}>
+                                <span className="text-xs text-muted-foreground">✕</span>
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -490,18 +503,19 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditSets(String(re.sets));
                                 setEditReps(String(re.reps));
                                 setEditWeight(re.weight != null ? String(re.weight) : "");
+                                setEditUnit(re.unit ?? "kg");
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
                               {re.set_groups?.length ? (
                                 re.set_groups.map((g: any, i: number) => (
                                   <p key={i} className="text-[10px] text-muted-foreground">
-                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}
+                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${re.unit ?? "kg"}` : ""}
                                   </p>
                                 ))
                               ) : (
                                 <p className="text-[10px] text-muted-foreground">
-                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}
+                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}${re.unit ?? "kg"}` : ""}
                                 </p>
                               )}
                             </button>
@@ -544,7 +558,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               <span className="text-[10px] text-muted-foreground">×</span>
                               <Input type="number" className="w-12 h-6 text-xs px-1" value={g.reps} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, reps: e.target.value } : x))} placeholder="R" />
                               <span className="text-[10px] text-muted-foreground">@</span>
-                              <Input type="number" className="w-16 h-6 text-xs px-1" value={g.weight} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))} placeholder="Kg" />
+                              <Input type="number" className="w-16 h-6 text-xs px-1" value={g.weight} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))} placeholder={re.unit ?? "kg"} />
                               <button onClick={() => setEditingGroups(prev => prev.filter((_, j) => j !== i))} className="text-destructive hover:opacity-70">
                                 <Trash2 className="h-3 w-3" />
                               </button>
@@ -571,7 +585,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
                       {prev && !isEditing && editingGroupsId !== re.id && (
                         <p className="text-[10px] text-accent-foreground/60 mt-0.5">
-                          Anterior: {prev.sets}×{prev.reps} @ {prev.weight}kg
+                          Anterior: {prev.sets}×{prev.reps} @ {prev.weight}{re.unit ?? "kg"}
                         </p>
                       )}
                     </div>
@@ -757,15 +771,17 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                   byExercise[l.exercise_id].push(l);
                 });
                 const exerciseNames: Record<string, string> = {};
-                (baseExercises ?? []).forEach((re: any) => {
+                const exerciseUnits: Record<string, string> = {};
+                (routineExercises ?? []).forEach((re: any) => {
                   if (re.exercises?.name) exerciseNames[re.exercise_id] = re.exercises.name;
+                  if (re.unit) exerciseUnits[re.exercise_id] = re.unit;
                 });
                 return Object.entries(byExercise).map(([exId, logs]) => (
                   <div key={exId} className="bg-secondary/50 rounded-lg px-3 py-2">
                     <p className="text-xs font-medium text-foreground mb-1">{exerciseNames[exId] || "Ejercicio"}</p>
                     {logs.sort((a, b) => a.set_number - b.set_number).map((l: any) => (
                       <p key={l.id} className="text-[10px] text-muted-foreground">
-                        Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}kg
+                        Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}{exerciseUnits[exId] ?? "kg"}
                         {l.completed ? " ✓" : ""}
                       </p>
                     ))}
