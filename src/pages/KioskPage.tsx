@@ -548,16 +548,14 @@ export default function KioskPage() {
               {!pendingClientAllWorkouts ? (
                 <p className="text-xs text-muted-foreground text-center py-3">Cargando...</p>
               ) : (() => {
-                const allWorkouts = pendingClientAllWorkouts.filter(
-                  w => w.workout_date !== today
-                );
-                if (!allWorkouts.length) {
+                if (!pendingClientAllWorkouts.length) {
                   return <p className="text-xs text-muted-foreground text-center py-3">No hay entrenamientos planificados.</p>;
                 }
-                // Separar pasados y próximos
-                const upcoming = allWorkouts.filter(w => w.workout_date > today);
-                const past = allWorkouts.filter(w => w.workout_date < today);
-                const renderItem = (w: any) => {
+                // Separar por sección
+                const todayWorkout = pendingClientAllWorkouts.filter(w => w.workout_date === today);
+                const upcoming = pendingClientAllWorkouts.filter(w => w.workout_date > today);
+                const past = pendingClientAllWorkouts.filter(w => w.workout_date < today);
+                const renderItem = (w: any, isToday = false) => {
                   const dateObj = new Date(w.workout_date + "T12:00:00");
                   const isPast = w.workout_date < today;
                   return (
@@ -582,7 +580,11 @@ export default function KioskPage() {
                           toast.error("Error al asignar el entrenamiento");
                         }
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-primary/10 border border-border hover:border-primary/40 transition-all text-left group"
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all text-left group
+                        ${isToday
+                          ? "border-primary bg-primary/5 hover:bg-primary/10"
+                          : "border-border hover:bg-primary/10 hover:border-primary/40"
+                        }`}
                     >
                       <div>
                         <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
@@ -591,28 +593,38 @@ export default function KioskPage() {
                             <span className="text-xs text-muted-foreground ml-1">— Día {(w as any).day_number ?? 1}</span>
                           )}
                         </p>
-                        <p className={`text-xs mt-0.5 ${isPast ? "text-muted-foreground" : "text-primary/70"}`}>
-                          {format(dateObj, "EEEE d 'de' MMMM", { locale: es })}
+                        <p className={`text-xs mt-0.5 ${isToday ? "text-primary font-medium" : isPast ? "text-muted-foreground" : "text-primary/70"}`}>
+                          {isToday ? "Hoy" : format(dateObj, "EEEE d 'de' MMMM", { locale: es })}
                         </p>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${isPast ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary"}`}>
-                        {isPast ? "pasado" : "próximo"}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        isToday ? "bg-primary text-primary-foreground" :
+                        isPast ? "bg-secondary text-muted-foreground" :
+                        "bg-primary/10 text-primary"
+                      }`}>
+                        {isToday ? "hoy" : isPast ? "pasado" : "próximo"}
                       </span>
                     </button>
                   );
                 };
                 return (
                   <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                    {todayWorkout.length > 0 && (
+                      <>
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1">Hoy</p>
+                        {todayWorkout.map(w => renderItem(w, true))}
+                      </>
+                    )}
                     {upcoming.length > 0 && (
                       <>
-                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1">Próximos</p>
-                        {[...upcoming].reverse().map(renderItem)}
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1 pt-2">Próximos</p>
+                        {[...upcoming].reverse().map(w => renderItem(w))}
                       </>
                     )}
                     {past.length > 0 && (
                       <>
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 pb-1 pt-2">Anteriores</p>
-                        {past.map(renderItem)}
+                        {past.map(w => renderItem(w))}
                       </>
                     )}
                   </div>
