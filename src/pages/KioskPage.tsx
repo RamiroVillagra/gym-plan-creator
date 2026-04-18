@@ -868,6 +868,12 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         )}
       </div>
       <div className="space-y-2">
+        {/* Encabezados de columna */}
+        <div className="flex items-center gap-3">
+          <span className="w-12" />
+          <span className="w-20 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">Reps</span>
+          <span className="w-20 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">{unit}</span>
+        </div>
         {localSets.map((s, i) => {
           const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
           return (
