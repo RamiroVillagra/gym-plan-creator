@@ -408,19 +408,21 @@ export default function CalendarPage() {
     },
   });
 
-  // Query: sesión anterior del alumno (último assigned_workout con logs antes de la fecha actual)
+  // Query: sesión anterior del alumno del MISMO día de rutina
   const { data: prevSession } = useQuery({
-    queryKey: ["prev-session", detailWorkout?.client_id, detailWorkout?.workout_date],
+    queryKey: ["prev-session", detailWorkout?.client_id, detailWorkout?.workout_date, detailWorkout?.day_number],
     enabled: !!detailWorkout && showPrevSession,
     queryFn: async () => {
-      // Buscar el assigned_workout anterior con logs
+      const dayNum = detailWorkout.day_number ?? 1;
+      // Buscar assigned_workouts anteriores con el mismo day_number
       const { data: prev, error } = await supabase
         .from("assigned_workouts")
         .select("id, workout_date, routines(name)")
         .eq("client_id", detailWorkout.client_id)
+        .eq("day_number", dayNum)
         .lt("workout_date", detailWorkout.workout_date)
         .order("workout_date", { ascending: false })
-        .limit(5);
+        .limit(10);
       if (error) throw error;
       if (!prev?.length) return null;
 
