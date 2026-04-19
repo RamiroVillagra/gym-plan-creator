@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp, Sun, Moon } from "lucide-react";
+import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp, Sun, Moon, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -12,6 +12,7 @@ const coachNav = [
   { to: "/routines", label: "Rutinas", icon: ClipboardList },
   { to: "/calendar", label: "Calendario", icon: CalendarDays },
   { to: "/groups", label: "Grupos", icon: UsersRound },
+  { to: "/bloques", label: "Bloques", icon: Layers },
   { to: "/kiosk", label: "Modo Kiosco", icon: Monitor },
   { to: "/stats", label: "Estadísticas", icon: TrendingUp },
 ];

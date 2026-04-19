@@ -15,6 +15,7 @@ import GroupsPage from "./pages/GroupsPage";
 import WorkoutPage from "./pages/WorkoutPage";
 import KioskPage from "./pages/KioskPage";
 import StatsPage from "./pages/StatsPage";
+import BlocksPage from "./pages/BlocksPage";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ function ProtectedRoutes() {
         <Route path="/workout" element={<WorkoutPage />} />
         <Route path="/kiosk" element={<KioskPage />} />
         <Route path="/stats" element={<StatsPage />} />
+        <Route path="/bloques" element={<BlocksPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>

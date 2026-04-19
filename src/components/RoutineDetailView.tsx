@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
@@ -47,6 +47,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
   // Historial por ejercicio
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
+
+  // Insertar bloque desde biblioteca
+  const [insertBlockOpen, setInsertBlockOpen] = useState(false);
 
   // Series progresivas (set_groups)
   const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
@@ -389,6 +392,56 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     },
   });
 
+  const { data: savedBlocks } = useQuery({
+    queryKey: ["workout-blocks"],
+    enabled: insertBlockOpen,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workout_blocks")
+        .select("*, workout_block_exercises(*, exercises(name, muscle_group))")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const insertBlock = useMutation({
+    mutationFn: async (block: any) => {
+      if (isOverrideMode) await ensureOverrides();
+      const currentExercises = isOverrideMode
+        ? (await supabase.from("assigned_workout_exercises").select("*").eq("assigned_workout_id", assignedWorkoutId!)).data ?? []
+        : routineExercises ?? [];
+      const dayExs = currentExercises.filter((re: any) => (re.day_number ?? 1) === selectedDay);
+      const nextBlock = dayExs.length ? Math.max(...dayExs.map((re: any) => re.block_number ?? 1)) + 1 : 1;
+
+      const sorted = [...(block.workout_block_exercises ?? [])].sort((a: any, b: any) => a.order_index - b.order_index);
+      const rows = sorted.map((be: any, i: number) => {
+        const base: any = {
+          exercise_id: be.exercise_id,
+          sets: be.sets ?? null,
+          reps: be.reps ?? null,
+          weight: be.weight ?? null,
+          order_index: i,
+          block_number: nextBlock,
+          day_number: selectedDay,
+        };
+        if (isOverrideMode) base.assigned_workout_id = assignedWorkoutId;
+        else base.routine_id = routineId;
+        return base;
+      });
+
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { error } = await supabase.from(table).insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+      setInsertBlockOpen(false);
+      toast.success("Bloque insertado");
+    },
+    onError: () => toast.error("Error al insertar bloque"),
+  });
+
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
@@ -637,13 +690,18 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
       {editable && (
         <>
-          <Button variant="outline" size="sm" className="mt-1" onClick={() => {
+          <div className="flex gap-2 mt-1 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => {
             const maxBlock = dayExercises.length ? Math.max(...dayExercises.map((re: any) => re.block_number)) : 1;
             setAddExBlock(maxBlock);
             setAddExOpen(true);
           }}>
             <Plus className="h-3 w-3 mr-1" />Agregar Ejercicio
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setInsertBlockOpen(true)}>
+            <LibraryBig className="h-3 w-3 mr-1" />Insertar Bloque
+          </Button>
+        </div>
 
           <Dialog open={addExOpen} onOpenChange={(open) => {
             setAddExOpen(open);
@@ -797,6 +855,49 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         </>
       )}
 
+      {/* Dialog: insertar bloque desde biblioteca */}
+      <Dialog open={insertBlockOpen} onOpenChange={setInsertBlockOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Insertar bloque desde biblioteca</DialogTitle>
+          </DialogHeader>
+          <div className="mt-2 space-y-2">
+            {!savedBlocks?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No hay bloques guardados. Creá uno en la sección <span className="font-medium">Bloques</span>.
+              </p>
+            ) : (
+              savedBlocks.map((block: any) => {
+                const exs = [...(block.workout_block_exercises ?? [])].sort((a: any, b: any) => a.order_index - b.order_index);
+                return (
+                  <button
+                    key={block.id}
+                    disabled={insertBlock.isPending}
+                    onClick={() => insertBlock.mutate(block)}
+                    className="w-full text-left bg-card border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-primary/5 transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className="h-4 w-4 text-primary shrink-0" />
+                      <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{block.name}</span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">{exs.length} ej.</span>
+                    </div>
+                    {exs.length > 0 && (
+                      <div className="space-y-0.5 ml-6">
+                        {exs.map((be: any, i: number) => (
+                          <p key={i} className="text-xs text-muted-foreground">
+                            {be.exercises?.name}
+                            {be.sets && be.reps ? ` — ${be.sets}×${be.reps}${be.weight ? ` @ ${be.weight}${be.unit ?? "kg"}` : ""}` : ""}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
