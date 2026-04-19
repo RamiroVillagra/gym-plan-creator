@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, History, ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -44,7 +44,6 @@ export default function CalendarPage() {
 
   // Workout detail dialog
   const [detailWorkout, setDetailWorkout] = useState<any>(null);
-  const [showPrevSession, setShowPrevSession] = useState(false);
 
   // Copy dialog (mismo alumno, otros días)
   const [copyOpen, setCopyOpen] = useState(false);
@@ -408,40 +407,6 @@ export default function CalendarPage() {
     },
   });
 
-  // Query: sesión anterior del alumno del MISMO día de rutina
-  const { data: prevSession } = useQuery({
-    queryKey: ["prev-session", detailWorkout?.client_id, detailWorkout?.workout_date, detailWorkout?.day_number],
-    enabled: !!detailWorkout && showPrevSession,
-    queryFn: async () => {
-      const dayNum = detailWorkout.day_number ?? 1;
-      // Buscar assigned_workouts anteriores con el mismo day_number
-      // Para día 1 también incluir los que tienen day_number NULL (rutinas de 1 solo día)
-      const { data: prev, error } = await supabase
-        .from("assigned_workouts")
-        .select("id, workout_date, routines(name)")
-        .eq("client_id", detailWorkout.client_id)
-        .lt("workout_date", detailWorkout.workout_date)
-        .or(dayNum === 1 ? "day_number.eq.1,day_number.is.null" : `day_number.eq.${dayNum}`)
-        .order("workout_date", { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      if (!prev?.length) return null;
-
-      // Buscar el primero que tenga logs
-      for (const w of prev) {
-        const { data: logs } = await supabase
-          .from("workout_logs")
-          .select("set_number, reps_done, weight_used, exercises(name)")
-          .eq("assigned_workout_id", w.id)
-          .eq("completed", true)
-          .order("set_number");
-        if (logs?.length) {
-          return { workout: w, logs };
-        }
-      }
-      return null;
-    },
-  });
 
   const toggleBulkDay = (dayOfWeek: number) => {
     setBulkDays(prev => {
@@ -758,7 +723,7 @@ export default function CalendarPage() {
       </Dialog>
 
       {/* Workout detail dialog — siempre muestra editor de ejercicios */}
-      <Dialog open={!!detailWorkout} onOpenChange={() => { setDetailWorkout(null); setShowPrevSession(false); }}>
+      <Dialog open={!!detailWorkout} onOpenChange={() => { setDetailWorkout(null); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -767,63 +732,6 @@ export default function CalendarPage() {
           </DialogHeader>
           {detailWorkout && (
             <div className="mt-2">
-
-              {/* Botón sesión anterior */}
-              <button
-                onClick={() => setShowPrevSession(v => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/40 hover:bg-secondary/70 text-sm text-foreground mb-3 transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <History className="h-4 w-4 text-primary" />
-                  <span className="font-medium">Ver sesión anterior</span>
-                </span>
-                {showPrevSession ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-              </button>
-
-              {/* Panel sesión anterior */}
-              {showPrevSession && (
-                <div className="mb-4 rounded-xl border border-border bg-secondary/20 overflow-hidden">
-                  {!prevSession ? (
-                    <p className="text-xs text-muted-foreground p-4 text-center">
-                      {prevSession === null ? "No hay sesiones anteriores con registros." : "Cargando..."}
-                    </p>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-b border-border">
-                        <History className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-xs font-semibold text-primary">
-                          {format(new Date(prevSession.workout.workout_date + "T12:00:00"), "EEEE d 'de' MMMM yyyy", { locale: es })}
-                        </span>
-                        {(prevSession.workout as any).routines?.name && (
-                          <span className="text-xs text-muted-foreground">— {(prevSession.workout as any).routines.name}</span>
-                        )}
-                      </div>
-                      <div className="p-3 space-y-1">
-                        {Object.entries(
-                          prevSession.logs.reduce((acc: Record<string, any[]>, log: any) => {
-                            const name = log.exercises?.name ?? "Ejercicio";
-                            if (!acc[name]) acc[name] = [];
-                            acc[name].push(log);
-                            return acc;
-                          }, {})
-                        ).map(([exName, sets]) => (
-                          <div key={exName} className="flex items-start gap-3 py-1.5 border-b border-border/40 last:border-0">
-                            <span className="text-xs font-medium text-foreground w-36 shrink-0">{exName}</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {(sets as any[]).map((s, i) => (
-                                <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-card border border-border text-muted-foreground">
-                                  S{s.set_number}: {s.reps_done ?? "—"} rep{s.weight_used ? ` @ ${s.weight_used}kg` : ""}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
               {detailWorkout.routine_id && (
                 <p className="text-xs text-muted-foreground mb-3">
                   Rutina base: <span className="text-primary">{detailWorkout.routines?.name}</span> — Los cambios se aplican solo a este alumno.

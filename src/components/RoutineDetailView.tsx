@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface RoutineDetailViewProps {
@@ -43,7 +45,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editWeight, setEditWeight] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
 
-  const [prevOpen, setPrevOpen] = useState(false);
+  // Historial por ejercicio
+  const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
 
   // Series progresivas (set_groups)
   const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
@@ -109,27 +112,42 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     await queryClient.invalidateQueries({ queryKey: ["assigned-workout-exercises", assignedWorkoutId] });
   }, [isOverrideMode, hasOverrides, baseExercises, assignedWorkoutId, queryClient]);
 
-  const { data: previousLogs } = useQuery({
-    queryKey: ["previous-logs", clientId, routineId, initialDay],
-    enabled: !!clientId && !!assignedWorkoutId,
+  // Historial de las últimas 3 sesiones del ejercicio seleccionado
+  const { data: exerciseHistory, isFetching: historyFetching } = useQuery({
+    queryKey: ["exercise-history", clientId, historyExerciseId],
+    enabled: !!clientId && !!historyExerciseId,
     queryFn: async () => {
-      const { data: prevWorkouts } = await supabase
+      const excludeId = assignedWorkoutId ?? "00000000-0000-0000-0000-000000000000";
+      // Últimos 30 workouts del cliente (excluyendo el actual)
+      const { data: clientWorkouts } = await supabase
         .from("assigned_workouts")
         .select("id, workout_date")
         .eq("client_id", clientId!)
-        .eq("routine_id", routineId)
-        .eq("day_number", initialDay)
-        .neq("id", assignedWorkoutId!)
+        .neq("id", excludeId)
         .order("workout_date", { ascending: false })
-        .limit(1);
-      if (!prevWorkouts?.length) return null;
-      const prevId = prevWorkouts[0].id;
-      const prevDate = prevWorkouts[0].workout_date;
+        .limit(30);
+      if (!clientWorkouts?.length) return [];
+
+      const workoutIds = clientWorkouts.map(w => w.id);
       const { data: logs } = await supabase
         .from("workout_logs")
-        .select("*")
-        .eq("assigned_workout_id", prevId);
-      return { logs: logs ?? [], date: prevDate };
+        .select("assigned_workout_id, set_number, reps_done, weight_used")
+        .in("assigned_workout_id", workoutIds)
+        .eq("exercise_id", historyExerciseId!)
+        .eq("completed", true)
+        .order("set_number");
+      if (!logs?.length) return [];
+
+      const workoutMap = new Map(clientWorkouts.map(w => [w.id, w.workout_date]));
+      const byWorkout = new Map<string, { date: string; logs: any[] }>();
+      for (const log of logs) {
+        const wId = log.assigned_workout_id;
+        if (!byWorkout.has(wId)) byWorkout.set(wId, { date: workoutMap.get(wId) ?? "", logs: [] });
+        byWorkout.get(wId)!.logs.push(log);
+      }
+      return Array.from(byWorkout.values())
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 3);
     },
   });
 
@@ -374,24 +392,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
-  const getPrevLog = (exerciseId: string) => {
-    if (!previousLogs?.logs) return null;
-    const logs = previousLogs.logs.filter((l: any) => l.exercise_id === exerciseId);
-    if (!logs.length) return null;
-    const maxWeight = Math.max(...logs.map((l: any) => l.weight_used ?? 0));
-    const avgReps = Math.round(logs.reduce((s: number, l: any) => s + (l.reps_done ?? 0), 0) / logs.length);
-    return { sets: logs.length, reps: avgReps, weight: maxWeight };
-  };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold text-foreground">{routineName}</p>
-        {clientId && previousLogs?.logs?.length ? (
-          <Button variant="ghost" size="sm" onClick={() => setPrevOpen(true)}>
-            <History className="h-3 w-3 mr-1" />Sesión anterior
-          </Button>
-        ) : null}
       </div>
 
       {totalDays > 1 && (
@@ -458,7 +462,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
               <div className="space-y-1">
                 {blockExercises.map((re: any) => {
                   const isEditing = editingId === re.id;
-                  const prev = clientId ? getPrevLog(re.exercise_id) : null;
+                  const showHistory = historyExerciseId === re.exercise_id;
                   return (
                     <div key={re.id} className="bg-secondary/50 rounded-lg px-3 py-1.5">
                       <div className="flex items-center justify-between">
@@ -519,8 +523,18 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 </p>
                               )}
                             </button>
-                            {editable && (
-                              <div className="flex items-center gap-0.5">
+                            <div className="flex items-center gap-0.5">
+                              {clientId && (
+                                <Button
+                                  variant="ghost" size="icon" className="h-6 w-6"
+                                  title="Últimas sesiones"
+                                  onClick={() => setHistoryExerciseId(showHistory ? null : re.exercise_id)}
+                                >
+                                  <History className={`h-3 w-3 ${showHistory ? "text-primary" : "text-muted-foreground"}`} />
+                                </Button>
+                              )}
+                              {editable && (
+                                <>
                                 <Button
                                   variant="ghost" size="icon" className="h-6 w-6"
                                   title="Series progresivas"
@@ -541,8 +555,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteExercise.mutate(re.id)}>
                                   <Trash2 className="h-3 w-3 text-destructive" />
                                 </Button>
-                              </div>
-                            )}
+                                </>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
@@ -583,10 +598,33 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                         </div>
                       )}
 
-                      {prev && !isEditing && editingGroupsId !== re.id && (
-                        <p className="text-[10px] text-accent-foreground/60 mt-0.5">
-                          Anterior: {prev.sets}×{prev.reps} @ {prev.weight}{re.unit ?? "kg"}
-                        </p>
+                      {/* Panel historial por ejercicio */}
+                      {showHistory && !isEditing && (
+                        <div className="mt-2 pt-2 border-t border-border/50">
+                          <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1.5">Últimas 3 sesiones</p>
+                          {historyFetching ? (
+                            <p className="text-[10px] text-muted-foreground">Cargando...</p>
+                          ) : !exerciseHistory?.length ? (
+                            <p className="text-[10px] text-muted-foreground">Sin registros anteriores.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {exerciseHistory.map((session, i) => (
+                                <div key={i}>
+                                  <p className="text-[10px] font-medium text-muted-foreground mb-0.5">
+                                    {format(new Date(session.date + "T12:00:00"), "d MMM yyyy", { locale: es })}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {session.logs.map((l: any, j: number) => (
+                                      <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-card border border-border text-foreground">
+                                        S{l.set_number}: {l.reps_done ?? "—"} rep{l.weight_used ? ` @ ${l.weight_used}${re.unit ?? "kg"}` : ""}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -759,41 +797,6 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         </>
       )}
 
-      <Dialog open={prevOpen} onOpenChange={setPrevOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Sesión Anterior — {previousLogs?.date}</DialogTitle></DialogHeader>
-          <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto">
-            {previousLogs?.logs?.length ? (
-              (() => {
-                const byExercise: Record<string, any[]> = {};
-                previousLogs.logs.forEach((l: any) => {
-                  if (!byExercise[l.exercise_id]) byExercise[l.exercise_id] = [];
-                  byExercise[l.exercise_id].push(l);
-                });
-                const exerciseNames: Record<string, string> = {};
-                const exerciseUnits: Record<string, string> = {};
-                (routineExercises ?? []).forEach((re: any) => {
-                  if (re.exercises?.name) exerciseNames[re.exercise_id] = re.exercises.name;
-                  if (re.unit) exerciseUnits[re.exercise_id] = re.unit;
-                });
-                return Object.entries(byExercise).map(([exId, logs]) => (
-                  <div key={exId} className="bg-secondary/50 rounded-lg px-3 py-2">
-                    <p className="text-xs font-medium text-foreground mb-1">{exerciseNames[exId] || "Ejercicio"}</p>
-                    {logs.sort((a, b) => a.set_number - b.set_number).map((l: any) => (
-                      <p key={l.id} className="text-[10px] text-muted-foreground">
-                        Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}{exerciseUnits[exId] ?? "kg"}
-                        {l.completed ? " ✓" : ""}
-                      </p>
-                    ))}
-                  </div>
-                ));
-              })()
-            ) : (
-              <p className="text-sm text-muted-foreground">No hay datos de sesiones anteriores.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
