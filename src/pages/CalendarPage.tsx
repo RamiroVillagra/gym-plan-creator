@@ -415,12 +415,13 @@ export default function CalendarPage() {
     queryFn: async () => {
       const dayNum = detailWorkout.day_number ?? 1;
       // Buscar assigned_workouts anteriores con el mismo day_number
+      // Para día 1 también incluir los que tienen day_number NULL (rutinas de 1 solo día)
       const { data: prev, error } = await supabase
         .from("assigned_workouts")
         .select("id, workout_date, routines(name)")
         .eq("client_id", detailWorkout.client_id)
-        .eq("day_number", dayNum)
         .lt("workout_date", detailWorkout.workout_date)
+        .or(dayNum === 1 ? "day_number.eq.1,day_number.is.null" : `day_number.eq.${dayNum}`)
         .order("workout_date", { ascending: false })
         .limit(10);
       if (error) throw error;
