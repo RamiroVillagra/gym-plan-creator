@@ -62,6 +62,9 @@ export default function RoutinesPage() {
   const [moveRoutineName, setMoveRoutineName] = useState("");
   const [moveTarget, setMoveTarget] = useState("");
 
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+  const [renameFolderValue, setRenameFolderValue] = useState("");
+
   const { data: routines, isLoading } = useQuery({
     queryKey: ["routines"],
     queryFn: async () => {
@@ -137,6 +140,43 @@ export default function RoutinesPage() {
     },
     onError: (err: any) => toast.error(`Error al eliminar: ${err.message ?? "intenta de nuevo"}`),
   });
+
+  const renameFolder = useMutation({
+    mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
+      // Actualizar todas las rutinas que tienen esa carpeta
+      const { error } = await supabase.from("routines")
+        .update({ folder: newName })
+        .eq("folder", oldName);
+      if (error) throw error;
+    },
+    onSuccess: (_data, { oldName, newName }) => {
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      // Actualizar también en localStorage si existía localmente
+      removeLocalFolder(oldName);
+      addLocalFolder(newName);
+      if (activeFolder === oldName) setActiveFolder(newName);
+      setRenamingFolder(null);
+      toast.success(`Carpeta renombrada a "${newName}"`);
+    },
+    onError: () => toast.error("Error al renombrar"),
+  });
+
+  const confirmRename = (oldName: string) => {
+    const newName = renameFolderValue.trim();
+    if (!newName || newName === oldName) { setRenamingFolder(null); return; }
+    if (allFolders.includes(newName)) { toast.error("Ya existe una carpeta con ese nombre"); return; }
+    // Si es solo local (sin rutinas en DB), solo renombrar en localStorage
+    const hasDbRoutines = routines?.some(r => (r as any).folder === oldName);
+    if (!hasDbRoutines) {
+      removeLocalFolder(oldName);
+      addLocalFolder(newName);
+      if (activeFolder === oldName) setActiveFolder(newName);
+      setRenamingFolder(null);
+      toast.success(`Carpeta renombrada a "${newName}"`);
+    } else {
+      renameFolder.mutate({ oldName, newName });
+    }
+  };
 
   const filteredRoutines = activeFolder
     ? routines?.filter(r => (r as any).folder === activeFolder) ?? []
@@ -261,18 +301,46 @@ export default function RoutinesPage() {
           </button>
           {allFolders.map(f => {
             const hasRoutines = routines?.some(r => (r as any).folder === f);
+            const isActive = activeFolder === f;
+            const isRenaming = renamingFolder === f;
             return (
-              <button
-                key={f}
-                onClick={() => setActiveFolder(activeFolder === f ? null : f)}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  activeFolder === f ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {activeFolder === f ? <FolderOpen className="h-3 w-3" /> : <Folder className="h-3 w-3" />}
-                {f}
-                {!hasRoutines && <span className="opacity-50 ml-0.5">(vacía)</span>}
-              </button>
+              <div key={f} className="flex items-center gap-0.5 group">
+                {isRenaming ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={e => { e.preventDefault(); confirmRename(f); }}
+                  >
+                    <input
+                      autoFocus
+                      value={renameFolderValue}
+                      onChange={e => setRenameFolderValue(e.target.value)}
+                      onBlur={() => confirmRename(f)}
+                      onKeyDown={e => { if (e.key === "Escape") setRenamingFolder(null); }}
+                      className="h-7 px-2 text-xs rounded-lg border border-primary bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary min-w-[80px]"
+                    />
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setActiveFolder(isActive ? null : f)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {isActive ? <FolderOpen className="h-3 w-3" /> : <Folder className="h-3 w-3" />}
+                      {f}
+                      {!hasRoutines && <span className="opacity-50 ml-0.5">(vacía)</span>}
+                    </button>
+                    <button
+                      onClick={() => { setRenamingFolder(f); setRenameFolderValue(f); }}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-secondary transition-all"
+                      title="Renombrar carpeta"
+                    >
+                      <Pencil className="h-2.5 w-2.5 text-muted-foreground" />
+                    </button>
+                  </>
+                )}
+              </div>
             );
           })}
         </div>
