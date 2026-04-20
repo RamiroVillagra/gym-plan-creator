@@ -51,6 +51,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   // Insertar bloque desde biblioteca
   const [insertBlockOpen, setInsertBlockOpen] = useState(false);
 
+  // Guardar bloque en biblioteca
+  const [savingBlockNum, setSavingBlockNum] = useState<number | null>(null);
+  const [saveBlockName, setSaveBlockName] = useState("");
+
   // Series progresivas (set_groups)
   const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
   const [editingGroups, setEditingGroups] = useState<{ sets: string; reps: string; weight: string }[]>([]);
@@ -442,6 +446,41 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     onError: () => toast.error("Error al insertar bloque"),
   });
 
+  const saveBlockToLibrary = useMutation({
+    mutationFn: async ({ blockNum, name }: { blockNum: number; name: string }) => {
+      const blockExercises = (routineExercises ?? []).filter(
+        (re: any) => (re.day_number ?? 1) === selectedDay && (re.block_number ?? 1) === blockNum
+      );
+      const { data: block, error: be } = await supabase
+        .from("workout_blocks")
+        .insert({ name: name.trim() })
+        .select().single();
+      if (be) throw be;
+      if (blockExercises.length) {
+        const rows = blockExercises
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((re: any, i: number) => ({
+            workout_block_id: block.id,
+            exercise_id: re.exercise_id,
+            sets: re.sets ?? null,
+            reps: re.reps ?? null,
+            weight: re.weight ?? null,
+            unit: re.unit ?? "kg",
+            order_index: i,
+          }));
+        const { error: ee } = await supabase.from("workout_block_exercises").insert(rows);
+        if (ee) throw ee;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workout-blocks"] });
+      setSavingBlockNum(null);
+      setSaveBlockName("");
+      toast.success("Bloque guardado en la biblioteca");
+    },
+    onError: () => toast.error("Error al guardar el bloque"),
+  });
+
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
@@ -481,10 +520,52 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       ) : (
         blocks.map(blockNum => {
           const blockExercises = dayExercises.filter((re: any) => re.block_number === blockNum);
+          const isSaving = savingBlockNum === blockNum;
           return (
-            <div key={blockNum} className="mb-3">
+            <div key={blockNum} className="mb-3 group">
               <div className="flex items-center gap-1 mb-1">
                 <p className="text-[10px] font-bold text-primary uppercase tracking-wider flex-1">Bloque {blockNum}</p>
+                {/* Guardar como bloque en biblioteca */}
+                {isSaving ? (
+                  <form
+                    className="flex items-center gap-1"
+                    onSubmit={e => {
+                      e.preventDefault();
+                      if (saveBlockName.trim()) saveBlockToLibrary.mutate({ blockNum, name: saveBlockName });
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={saveBlockName}
+                      onChange={e => setSaveBlockName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Escape") { setSavingBlockNum(null); setSaveBlockName(""); } }}
+                      placeholder="Nombre del bloque..."
+                      className="h-6 px-2 text-[10px] rounded border border-primary bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-36"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!saveBlockName.trim() || saveBlockToLibrary.isPending}
+                      className="h-6 px-2 text-[10px] rounded bg-primary text-primary-foreground disabled:opacity-40 font-medium"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSavingBlockNum(null); setSaveBlockName(""); }}
+                      className="h-6 px-1 text-[10px] rounded hover:bg-secondary text-muted-foreground"
+                    >
+                      ✕
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => { setSavingBlockNum(blockNum); setSaveBlockName(`Bloque ${blockNum}`); }}
+                    className="p-0.5 rounded hover:bg-secondary/60 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Guardar bloque en biblioteca"
+                  >
+                    <LibraryBig className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                )}
                 {editable && (
                   <>
                     <button
