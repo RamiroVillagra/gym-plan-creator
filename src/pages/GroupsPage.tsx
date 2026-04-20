@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, ChevronDown, ChevronUp, Users, CalendarDays, Search, X } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addWeeks, addDays, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -31,7 +31,21 @@ export default function GroupsPage() {
   const [bulkRoutineId, setBulkRoutineId] = useState("");
   const [bulkRoutineName, setBulkRoutineName] = useState("");
   const [bulkRoutineSearch, setBulkRoutineSearch] = useState("");
-  const [bulkDate, setBulkDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [bulkDays, setBulkDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
+  const [bulkWeeks, setBulkWeeks] = useState("4");
+
+  const dayNames = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  const toggleBulkDay = (dayOfWeek: number) => {
+    setBulkDays(prev => {
+      const exists = prev.find(x => x.dayOfWeek === dayOfWeek);
+      if (exists) return prev.filter(x => x.dayOfWeek !== dayOfWeek);
+      return [...prev, { dayOfWeek, routineDay: 1 }];
+    });
+  };
+  const setBulkRoutineDayFn = (dayOfWeek: number, routineDay: number) => {
+    setBulkDays(prev => prev.map(x => x.dayOfWeek === dayOfWeek ? { ...x, routineDay } : x));
+  };
 
   const { data: groups, isLoading } = useQuery({
     queryKey: ["groups"],
@@ -137,11 +151,33 @@ export default function GroupsPage() {
       if (membersError) throw membersError;
       if (!members?.length) throw new Error("El grupo no tiene alumnos");
 
-      const inserts = members.map(m => ({
-        client_id: m.client_id,
-        routine_id: bulkRoutineId || null,
-        workout_date: bulkDate,
-      }));
+      const weeks = parseInt(bulkWeeks) || 1;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Para cada día seleccionado, calcular la primera ocurrencia >= hoy
+      const firstOccurrences = bulkDays.map(({ dayOfWeek, routineDay }) => {
+        const thisWeekOccurrence = addDays(startOfWeek(today, { weekStartsOn: 1 }), dayOfWeek);
+        const firstDate = thisWeekOccurrence < today
+          ? addWeeks(thisWeekOccurrence, 1)
+          : thisWeekOccurrence;
+        return { dayOfWeek, routineDay, firstDate };
+      });
+
+      const inserts: any[] = [];
+      for (const member of members) {
+        for (const { routineDay, firstDate } of firstOccurrences) {
+          for (let w = 0; w < weeks; w++) {
+            const date = addWeeks(firstDate, w);
+            inserts.push({
+              client_id: member.client_id,
+              routine_id: bulkRoutineId || null,
+              workout_date: format(date, "yyyy-MM-dd"),
+              day_number: routineDay,
+            });
+          }
+        }
+      }
 
       const { error } = await supabase.from("assigned_workouts").insert(inserts);
       if (error) throw error;
@@ -149,7 +185,7 @@ export default function GroupsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       queryClient.invalidateQueries({ queryKey: ["workouts-count"] });
-      setBulkAssignOpen(false); setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch("");
+      setBulkAssignOpen(false); setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkDays([]);
       toast.success("Rutina asignada a todo el grupo");
     },
     onError: (e: any) => toast.error(e.message || "Error al asignar"),
@@ -330,7 +366,7 @@ export default function GroupsPage() {
       {/* Bulk assign routine dialog */}
       <Dialog open={bulkAssignOpen} onOpenChange={(o) => {
         setBulkAssignOpen(o);
-        if (!o) { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); }
+        if (!o) { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkDays([]); }
       }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Asignar Rutina al Grupo</DialogTitle></DialogHeader>
@@ -342,7 +378,7 @@ export default function GroupsPage() {
               {bulkRoutineId ? (
                 <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
                   <span className="text-sm font-medium text-primary">{bulkRoutineName}</span>
-                  <button onClick={() => { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); }}>
+                  <button onClick={() => { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkDays([]); }}>
                     <X className="h-4 w-4 text-primary/60 hover:text-primary" />
                   </button>
                 </div>
@@ -370,7 +406,7 @@ export default function GroupsPage() {
                   {routines?.filter(r => r.name.toLowerCase().includes(bulkRoutineSearch.toLowerCase())).map(r => (
                     <button
                       key={r.id}
-                      onClick={() => { setBulkRoutineId(r.id); setBulkRoutineName(r.name); setBulkRoutineSearch(""); }}
+                      onClick={() => { setBulkRoutineId(r.id); setBulkRoutineName(r.name); setBulkRoutineSearch(""); setBulkDays([]); }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors"
                     >
                       {r.name}
@@ -383,16 +419,67 @@ export default function GroupsPage() {
               )}
             </div>
 
-            {/* Fecha */}
+            {/* Días de la semana */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Fecha</label>
-              <Input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+              <label className="text-xs text-muted-foreground block mb-2">¿Qué días entrena?</label>
+              <div className="flex gap-1 mb-3">
+                {dayNames.map((d, i) => {
+                  const isSelected = bulkDays.some(x => x.dayOfWeek === i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => toggleBulkDay(i)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        isSelected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Por cada día seleccionado, elegir qué día de la rutina */}
+              {(() => {
+                const routine = routines?.find(r => r.id === bulkRoutineId);
+                const totalDays = (routine as any)?.total_days ?? 1;
+                if (!bulkRoutineId || totalDays <= 1 || !bulkDays.length) return null;
+                return (
+                  <div className="space-y-2 border border-border rounded-lg p-3 bg-secondary/20">
+                    <p className="text-xs text-muted-foreground font-medium">¿Qué día de la rutina corresponde a cada día?</p>
+                    {[...bulkDays].sort((a, b) => a.dayOfWeek - b.dayOfWeek).map(({ dayOfWeek, routineDay }) => (
+                      <div key={dayOfWeek} className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-foreground w-8">{dayNames[dayOfWeek]}</span>
+                        <div className="flex gap-1 flex-1">
+                          {Array.from({ length: totalDays }, (_, i) => i + 1).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setBulkRoutineDayFn(dayOfWeek, d)}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                routineDay === d ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              Día {d}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Semanas */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">¿Por cuántas semanas?</label>
+              <Input type="number" min="1" max="52" value={bulkWeeks} onChange={e => setBulkWeeks(e.target.value)} />
             </div>
 
             <Button
               className="w-full"
               onClick={() => bulkAssignRoutine.mutate()}
-              disabled={!bulkRoutineId || bulkAssignRoutine.isPending}
+              disabled={!bulkDays.length || bulkAssignRoutine.isPending}
             >
               Asignar a Todos
             </Button>
