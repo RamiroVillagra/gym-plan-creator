@@ -29,6 +29,8 @@ export default function GroupsPage() {
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkGroupId, setBulkGroupId] = useState<string | null>(null);
   const [bulkRoutineId, setBulkRoutineId] = useState("");
+  const [bulkRoutineName, setBulkRoutineName] = useState("");
+  const [bulkRoutineSearch, setBulkRoutineSearch] = useState("");
   const [bulkDate, setBulkDate] = useState(format(new Date(), "yyyy-MM-dd"));
 
   const { data: groups, isLoading } = useQuery({
@@ -147,7 +149,7 @@ export default function GroupsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       queryClient.invalidateQueries({ queryKey: ["workouts-count"] });
-      setBulkAssignOpen(false); setBulkRoutineId("");
+      setBulkAssignOpen(false); setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch("");
       toast.success("Rutina asignada a todo el grupo");
     },
     onError: (e: any) => toast.error(e.message || "Error al asignar"),
@@ -326,23 +328,72 @@ export default function GroupsPage() {
       </Dialog>
 
       {/* Bulk assign routine dialog */}
-      <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+      <Dialog open={bulkAssignOpen} onOpenChange={(o) => {
+        setBulkAssignOpen(o);
+        if (!o) { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); }
+      }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Asignar Rutina al Grupo</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-4">
-            <select
-              className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm text-foreground"
-              value={bulkRoutineId}
-              onChange={e => setBulkRoutineId(e.target.value)}
-            >
-              <option value="">Seleccionar rutina</option>
-              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
+
+            {/* Rutina */}
             <div>
-              <label className="text-xs text-muted-foreground">Fecha</label>
+              <label className="text-xs text-muted-foreground block mb-1">Rutina</label>
+              {bulkRoutineId ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                  <span className="text-sm font-medium text-primary">{bulkRoutineName}</span>
+                  <button onClick={() => { setBulkRoutineId(""); setBulkRoutineName(""); setBulkRoutineSearch(""); }}>
+                    <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar rutina..."
+                    className="pl-10"
+                    value={bulkRoutineSearch}
+                    onChange={e => setBulkRoutineSearch(e.target.value)}
+                  />
+                  {bulkRoutineSearch && (
+                    <button
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
+                      onClick={() => setBulkRoutineSearch("")}
+                    >
+                      <X className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {!bulkRoutineId && bulkRoutineSearch && (
+                <div className="mt-1 border border-border rounded-lg bg-card max-h-40 overflow-y-auto">
+                  {routines?.filter(r => r.name.toLowerCase().includes(bulkRoutineSearch.toLowerCase())).map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => { setBulkRoutineId(r.id); setBulkRoutineName(r.name); setBulkRoutineSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors"
+                    >
+                      {r.name}
+                    </button>
+                  ))}
+                  {!routines?.filter(r => r.name.toLowerCase().includes(bulkRoutineSearch.toLowerCase())).length && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Fecha</label>
               <Input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
             </div>
-            <Button className="w-full" onClick={() => bulkAssignRoutine.mutate()} disabled={!bulkRoutineId}>
+
+            <Button
+              className="w-full"
+              onClick={() => bulkAssignRoutine.mutate()}
+              disabled={!bulkRoutineId || bulkAssignRoutine.isPending}
+            >
               Asignar a Todos
             </Button>
           </div>
