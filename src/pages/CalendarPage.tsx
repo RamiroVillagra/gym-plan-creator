@@ -62,8 +62,14 @@ export default function CalendarPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState<"client" | "group">("client");
   const [bulkClient, setBulkClient] = useState("");
+  const [bulkClientName, setBulkClientName] = useState("");
+  const [bulkClientSearch, setBulkClientSearch] = useState("");
   const [bulkGroup, setBulkGroup] = useState("");
+  const [bulkGroupName, setBulkGroupName] = useState("");
+  const [bulkGroupSearch, setBulkGroupSearch] = useState("");
   const [bulkRoutine, setBulkRoutine] = useState("");
+  const [bulkRoutineName, setBulkRoutineName] = useState("");
+  const [bulkRoutineSearch, setBulkRoutineSearch] = useState("");
   const [bulkDays, setBulkDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
   const [bulkWeeks, setBulkWeeks] = useState("4");
 
@@ -368,7 +374,9 @@ export default function CalendarPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setBulkOpen(false);
-      setBulkDays([]); setBulkClient(""); setBulkGroup(""); setBulkRoutine(""); setBulkWeeks("4");
+      setBulkDays([]); setBulkClient(""); setBulkClientName(""); setBulkClientSearch("");
+      setBulkGroup(""); setBulkGroupName(""); setBulkGroupSearch("");
+      setBulkRoutine(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkWeeks("4");
       toast.success("Entrenamientos asignados");
     },
   });
@@ -999,34 +1007,103 @@ export default function CalendarPage() {
               </button>
             </div>
 
+            {/* Alumno o Grupo */}
             {bulkMode === "client" ? (
-              <select
-                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                value={bulkClient}
-                onChange={e => setBulkClient(e.target.value)}
-              >
-                <option value="">Seleccionar alumno *</option>
-                {clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Alumno *</label>
+                {bulkClient ? (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                    <span className="text-sm font-medium text-primary">{bulkClientName}</span>
+                    <button onClick={() => { setBulkClient(""); setBulkClientName(""); setBulkClientSearch(""); }}>
+                      <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Buscar alumno..." className="pl-10"
+                      value={bulkClientSearch} onChange={e => setBulkClientSearch(e.target.value)} autoFocus />
+                  </div>
+                )}
+                {!bulkClient && bulkClientSearch && (
+                  <div className="mt-1 border border-border rounded-lg bg-card max-h-40 overflow-y-auto">
+                    {clients?.filter(c => c.name.toLowerCase().includes(bulkClientSearch.toLowerCase())).map(c => (
+                      <button key={c.id} onClick={() => { setBulkClient(c.id); setBulkClientName(c.name); setBulkClientSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                        {c.name}
+                      </button>
+                    ))}
+                    {!clients?.filter(c => c.name.toLowerCase().includes(bulkClientSearch.toLowerCase())).length && (
+                      <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
-              <select
-                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                value={bulkGroup}
-                onChange={e => setBulkGroup(e.target.value)}
-              >
-                <option value="">Seleccionar grupo *</option>
-                {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Grupo *</label>
+                {bulkGroup ? (
+                  <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                    <span className="text-sm font-medium text-primary">{bulkGroupName}</span>
+                    <button onClick={() => { setBulkGroup(""); setBulkGroupName(""); setBulkGroupSearch(""); }}>
+                      <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Buscar grupo..." className="pl-10"
+                      value={bulkGroupSearch} onChange={e => setBulkGroupSearch(e.target.value)} autoFocus />
+                  </div>
+                )}
+                {!bulkGroup && bulkGroupSearch && (
+                  <div className="mt-1 border border-border rounded-lg bg-card max-h-40 overflow-y-auto">
+                    {groups?.filter(g => g.name.toLowerCase().includes(bulkGroupSearch.toLowerCase())).map(g => (
+                      <button key={g.id} onClick={() => { setBulkGroup(g.id); setBulkGroupName(g.name); setBulkGroupSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                        {g.name}
+                      </button>
+                    ))}
+                    {!groups?.filter(g => g.name.toLowerCase().includes(bulkGroupSearch.toLowerCase())).length && (
+                      <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados</p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
-            <select
-              className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-              value={bulkRoutine}
-              onChange={e => { setBulkRoutine(e.target.value); setBulkDays([]); }}
-            >
-              <option value="">Sin rutina (agregar ejercicios manualmente)</option>
-              {routines?.map(r => <option key={r.id} value={r.id}>{r.name}{(r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : ""}</option>)}
-            </select>
+            {/* Rutina */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Rutina</label>
+              {bulkRoutine ? (
+                <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                  <span className="text-sm font-medium text-primary">{bulkRoutineName}</span>
+                  <button onClick={() => { setBulkRoutine(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkDays([]); }}>
+                    <X className="h-4 w-4 text-primary/60 hover:text-primary" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Buscar rutina (o dejar vacío para sin rutina)..." className="pl-10"
+                    value={bulkRoutineSearch} onChange={e => setBulkRoutineSearch(e.target.value)} />
+                </div>
+              )}
+              {!bulkRoutine && bulkRoutineSearch && (
+                <div className="mt-1 border border-border rounded-lg bg-card max-h-40 overflow-y-auto">
+                  {routines?.filter(r => r.name.toLowerCase().includes(bulkRoutineSearch.toLowerCase())).map(r => (
+                    <button key={r.id}
+                      onClick={() => { setBulkRoutine(r.id); setBulkRoutineName(r.name + ((r as any).total_days > 1 ? ` (${(r as any).total_days} días)` : "")); setBulkRoutineSearch(""); setBulkDays([]); }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                      {r.name}{(r as any).total_days > 1 ? <span className="text-xs text-muted-foreground ml-1">({(r as any).total_days} días)</span> : ""}
+                    </button>
+                  ))}
+                  {!routines?.filter(r => r.name.toLowerCase().includes(bulkRoutineSearch.toLowerCase())).length && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados</p>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="text-xs text-muted-foreground block mb-2">¿Qué días entrena?</label>
