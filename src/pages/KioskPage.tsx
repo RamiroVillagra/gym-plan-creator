@@ -564,18 +564,27 @@ export default function KioskPage() {
                       disabled={assignWorkoutToday.isPending}
                       onClick={async () => {
                         try {
-                          await assignWorkoutToday.mutateAsync({
-                            clientId: pendingManualClient.id,
-                            routineId: (w as any).routines?.id ?? null,
-                            dayNumber: (w as any).day_number ?? 1,
-                            sourceWorkoutId: w.id,
-                          });
-                          setManualClients(prev => [...prev, pendingManualClient]);
-                          queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
                           const label = (w as any).routines?.name ?? "Entrenamiento libre";
-                          toast.success(`${pendingManualClient.name} — "${label}" asignado para hoy`);
-                          setPendingManualClient(null);
-                          setClientSearch("");
+                          if (w.workout_date === today) {
+                            // Ya es de hoy → no borrar ni recrear, usar directamente
+                            setManualClients(prev => [...prev, pendingManualClient]);
+                            queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
+                            toast.success(`${pendingManualClient.name} — "${label}" cargado`);
+                            setPendingManualClient(null);
+                            setClientSearch("");
+                          } else {
+                            await assignWorkoutToday.mutateAsync({
+                              clientId: pendingManualClient.id,
+                              routineId: (w as any).routines?.id ?? null,
+                              dayNumber: (w as any).day_number ?? 1,
+                              sourceWorkoutId: w.id,
+                            });
+                            setManualClients(prev => [...prev, pendingManualClient]);
+                            queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
+                            toast.success(`${pendingManualClient.name} — "${label}" asignado para hoy`);
+                            setPendingManualClient(null);
+                            setClientSearch("");
+                          }
                         } catch {
                           toast.error("Error al asignar el entrenamiento");
                         }
