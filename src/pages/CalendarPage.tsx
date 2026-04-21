@@ -582,15 +582,17 @@ export default function CalendarPage() {
                           }}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-foreground truncate font-medium flex items-center gap-1">
-                              {isClientFiltered
-                                ? (w.routines?.name || "Entrenamiento libre")
-                                : w.clients?.name
-                              }
+                            <div className="flex items-center gap-1 min-w-0 flex-1">
+                              <span className="text-foreground truncate font-medium">
+                                {isClientFiltered
+                                  ? (w.routines?.name || "Entrenamiento libre")
+                                  : w.clients?.name
+                                }
+                              </span>
                               {w.notes && (
                                 <MessageSquare className="h-2.5 w-2.5 text-primary shrink-0" />
                               )}
-                            </span>
+                            </div>
                             {role === "coach" && (
                               <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
                                 <button onClick={e => { e.stopPropagation(); setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}>
