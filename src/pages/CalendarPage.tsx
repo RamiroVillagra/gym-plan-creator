@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -582,11 +582,14 @@ export default function CalendarPage() {
                           }}
                         >
                           <div className="flex items-center justify-between">
-                            <span className="text-foreground truncate font-medium">
+                            <span className="text-foreground truncate font-medium flex items-center gap-1">
                               {isClientFiltered
                                 ? (w.routines?.name || "Entrenamiento libre")
                                 : w.clients?.name
                               }
+                              {w.notes && (
+                                <MessageSquare className="h-2.5 w-2.5 text-primary shrink-0" />
+                              )}
                             </span>
                             {role === "coach" && (
                               <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 ml-1">
@@ -740,6 +743,15 @@ export default function CalendarPage() {
           </DialogHeader>
           {detailWorkout && (
             <div className="mt-2">
+              {detailWorkout.notes && (
+                <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2.5 mb-3">
+                  <MessageSquare className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-primary mb-0.5">Comentario de la sesión</p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{detailWorkout.notes}</p>
+                  </div>
+                </div>
+              )}
               {detailWorkout.routine_id && (
                 <p className="text-xs text-muted-foreground mb-3">
                   Rutina base: <span className="text-primary">{detailWorkout.routines?.name}</span> — Los cambios se aplican solo a este alumno.
@@ -1196,15 +1208,23 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
               className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3 cursor-pointer hover:bg-secondary/70 transition-colors"
               onClick={() => onViewDetail(w)}
             >
-              <div>
-                <p className="font-medium text-foreground">{w.clients?.name}</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium text-foreground">{w.clients?.name}</p>
+                  {w.notes && (
+                    <MessageSquare className="h-3.5 w-3.5 text-primary shrink-0" />
+                  )}
+                </div>
                 {w.routines?.name
                   ? <p className="text-xs text-muted-foreground">{w.routines.name}</p>
                   : <p className="text-xs text-muted-foreground">Entrenamiento libre</p>
                 }
+                {w.notes && (
+                  <p className="text-xs text-muted-foreground mt-1 truncate italic">"{w.notes}"</p>
+                )}
               </div>
               {role === "coach" && (
-                <div className="flex gap-1">
+                <div className="flex gap-1 ml-2 shrink-0">
                   <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); onEdit(w); }}>
                     <Pencil className="h-4 w-4 text-muted-foreground" />
                   </Button>
