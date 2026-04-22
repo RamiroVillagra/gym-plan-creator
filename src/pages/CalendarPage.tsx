@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -416,6 +416,97 @@ export default function CalendarPage() {
   });
 
 
+  const [savingDay, setSavingDay] = useState<string | null>(null);
+
+  const saveDayWorkouts = async (dateStr: string) => {
+    setSavingDay(dateStr);
+    try {
+      // Obtener todos los workouts de ese día (de los ya cargados, o buscar sin filtro)
+      let dayWorkouts: any[] = workouts?.filter((w: any) => w.workout_date === dateStr) ?? [];
+
+      // Si no hay filtro de cliente, buscar todos los workouts de ese día
+      if (!filterClient) {
+        const { data } = await supabase
+          .from("assigned_workouts")
+          .select("*, routines(id, total_days)")
+          .eq("workout_date", dateStr);
+        dayWorkouts = data ?? [];
+      }
+
+      if (!dayWorkouts.length) {
+        toast.info("No hay entrenamientos para guardar ese día");
+        return;
+      }
+
+      let savedCount = 0;
+
+      for (const workout of dayWorkouts) {
+        const dayNum = workout.day_number ?? 1;
+
+        // Ejercicios modificados del workout
+        const { data: assignedExs } = await supabase
+          .from("assigned_workout_exercises")
+          .select("*")
+          .eq("assigned_workout_id", workout.id);
+
+        let exercises: any[] = assignedExs ?? [];
+
+        // Fallback a rutina base
+        if (!exercises.length && workout.routine_id) {
+          const { data: routineExs } = await supabase
+            .from("routine_exercises")
+            .select("*")
+            .eq("routine_id", workout.routine_id)
+            .eq("day_number", dayNum);
+          exercises = routineExs ?? [];
+        }
+
+        if (!exercises.length) continue;
+
+        // Logs ya existentes para este workout
+        const { data: existingLogs } = await supabase
+          .from("workout_logs")
+          .select("exercise_id, set_number")
+          .eq("assigned_workout_id", workout.id);
+
+        const toInsert: any[] = [];
+        for (const ex of exercises) {
+          const totalSets = ex.sets ?? 1;
+          for (let s = 1; s <= totalSets; s++) {
+            const alreadyLogged = existingLogs?.some(
+              (l: any) => l.exercise_id === ex.exercise_id && l.set_number === s
+            );
+            if (!alreadyLogged) {
+              toInsert.push({
+                assigned_workout_id: workout.id,
+                exercise_id: ex.exercise_id,
+                set_number: s,
+                reps_done: ex.reps ?? 0,
+                weight_used: ex.weight ?? 0,
+                completed: true,
+              });
+            }
+          }
+        }
+
+        if (toInsert.length) {
+          await supabase.from("workout_logs").insert(toInsert);
+          savedCount++;
+        }
+      }
+
+      if (savedCount > 0) {
+        toast.success(`${savedCount} entrenamiento${savedCount > 1 ? "s" : ""} guardado${savedCount > 1 ? "s" : ""}`);
+      } else {
+        toast.info("Todos los entrenamientos ya estaban guardados");
+      }
+    } catch {
+      toast.error("Error al guardar el día");
+    } finally {
+      setSavingDay(null);
+    }
+  };
+
   const toggleBulkDay = (dayOfWeek: number) => {
     setBulkDays(prev => {
       const exists = prev.find(x => x.dayOfWeek === dayOfWeek);
@@ -537,6 +628,8 @@ export default function CalendarPage() {
           onDelete={(id) => deleteWorkout.mutate(id)}
           onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}
           onViewDetail={(w) => setDetailWorkout(w)}
+          onSaveDay={() => saveDayWorkouts(format(currentDate, "yyyy-MM-dd"))}
+          isSavingDay={savingDay === format(currentDate, "yyyy-MM-dd")}
         />
       ) : (
         <div>
@@ -555,7 +648,7 @@ export default function CalendarPage() {
               return (
                 <div
                   key={dateStr}
-                  className={`bg-card border rounded-lg p-2 min-h-[80px] md:min-h-[100px] cursor-pointer transition-colors hover:border-primary/30 ${
+                  className={`group bg-card border rounded-lg p-2 min-h-[80px] md:min-h-[100px] cursor-pointer transition-colors hover:border-primary/30 ${
                     isToday ? "border-primary" : "border-border"
                   } ${!isCurrentMonth ? "opacity-40" : ""}`}
                   onClick={() => {
@@ -566,9 +659,21 @@ export default function CalendarPage() {
                     }
                   }}
                 >
-                  <p className={`text-xs font-medium mb-1 ${isToday ? "text-primary" : "text-foreground"}`}>
-                    {format(day, "d")}
-                  </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className={`text-xs font-medium ${isToday ? "text-primary" : "text-foreground"}`}>
+                      {format(day, "d")}
+                    </p>
+                    {dayWorkouts.length > 0 && (
+                      <button
+                        onClick={e => { e.stopPropagation(); saveDayWorkouts(dateStr); }}
+                        disabled={savingDay === dateStr}
+                        title="Guardar día"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-primary/10 disabled:opacity-40"
+                      >
+                        <Save className={`h-2.5 w-2.5 ${savingDay === dateStr ? "text-muted-foreground" : "text-primary"}`} />
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-0.5">
                     {dayWorkouts.slice(0, 3).map((w: any) => {
                       const wExercises = workoutExercises?.filter((e: any) => e.assigned_workout_id === w.id) ?? [];
@@ -1186,9 +1291,10 @@ export default function CalendarPage() {
   );
 }
 
-function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail }: {
+function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
   date: Date; workouts: any[]; role: string | null; isClientFiltered: boolean;
   onAdd: () => void; onDelete: (id: string) => void; onEdit: (w: any) => void; onViewDetail: (w: any) => void;
+  onSaveDay: () => void; isSavingDay: boolean;
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-6">
@@ -1197,7 +1303,15 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
           {format(date, "EEEE d 'de' MMMM", { locale: es })}
         </h2>
         {role === "coach" && (
-          <Button size="sm" onClick={onAdd}><Plus className="h-4 w-4 mr-1" />Agregar</Button>
+          <div className="flex items-center gap-2">
+            {workouts.length > 0 && (
+              <Button size="sm" variant="outline" onClick={onSaveDay} disabled={isSavingDay}>
+                <Save className="h-4 w-4 mr-1" />
+                {isSavingDay ? "Guardando..." : "Guardar día"}
+              </Button>
+            )}
+            <Button size="sm" onClick={onAdd}><Plus className="h-4 w-4 mr-1" />Agregar</Button>
+          </div>
         )}
       </div>
       {!workouts.length ? (
