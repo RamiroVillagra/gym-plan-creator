@@ -539,9 +539,20 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-2">
           {role === "coach" && (
-            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
-              <CalendarDays className="h-4 w-4 mr-1" />Planificar
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => saveDayWorkouts(format(viewMode === "day" ? currentDate : new Date(), "yyyy-MM-dd"))}
+                disabled={!!savingDay}
+              >
+                <Save className="h-4 w-4 mr-1" />
+                {savingDay ? "Guardando..." : "Guardar día"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
+                <CalendarDays className="h-4 w-4 mr-1" />Planificar
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1303,15 +1314,7 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
           {format(date, "EEEE d 'de' MMMM", { locale: es })}
         </h2>
         {role === "coach" && (
-          <div className="flex items-center gap-2">
-            {workouts.length > 0 && (
-              <Button size="sm" variant="outline" onClick={onSaveDay} disabled={isSavingDay}>
-                <Save className="h-4 w-4 mr-1" />
-                {isSavingDay ? "Guardando..." : "Guardar día"}
-              </Button>
-            )}
-            <Button size="sm" onClick={onAdd}><Plus className="h-4 w-4 mr-1" />Agregar</Button>
-          </div>
+          <Button size="sm" onClick={onAdd}><Plus className="h-4 w-4 mr-1" />Agregar</Button>
         )}
       </div>
       {!workouts.length ? (
