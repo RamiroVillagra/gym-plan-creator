@@ -18,7 +18,7 @@ const coachNav = [
 ];
 
 const studentNav = [
-  { to: "/", label: "Mi Entrenamiento", icon: Dumbbell },
+  { to: "/", label: "Mi Entrenamiento", icon: CalendarDays },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

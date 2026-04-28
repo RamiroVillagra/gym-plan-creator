@@ -13,6 +13,7 @@ import RoutinesPage from "./pages/RoutinesPage";
 import CalendarPage from "./pages/CalendarPage";
 import GroupsPage from "./pages/GroupsPage";
 import WorkoutPage from "./pages/WorkoutPage";
+import StudentHomePage from "./pages/StudentHomePage";
 import KioskPage from "./pages/KioskPage";
 import StatsPage from "./pages/StatsPage";
 import BlocksPage from "./pages/BlocksPage";
@@ -37,8 +38,7 @@ function ProtectedRoutes() {
     return (
       <AppLayout>
         <Routes>
-          <Route path="/" element={<WorkoutPage />} />
-          <Route path="/workout" element={<WorkoutPage />} />
+          <Route path="/" element={<StudentHomePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppLayout>
