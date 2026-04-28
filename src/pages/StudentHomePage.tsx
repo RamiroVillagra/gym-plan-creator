@@ -130,8 +130,8 @@ export default function StudentHomePage() {
             <ChevronRight className="h-4 w-4" />
           </button>
           <button
-            onClick={() => setCurrentDate(new Date())}
-            className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-secondary transition-colors text-muted-foreground"
+            onClick={() => { setCurrentDate(new Date()); setViewMode("month"); }}
+            className="text-xs px-2.5 py-1 rounded-lg border border-primary/50 hover:bg-primary/10 transition-colors text-primary font-medium"
           >
             Hoy
           </button>
