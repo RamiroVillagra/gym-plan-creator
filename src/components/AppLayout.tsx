@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp, Sun, Moon, Layers } from "lucide-react";
+import { Dumbbell, Users, ListChecks, CalendarDays, ClipboardList, Menu, X, LogOut, UsersRound, Monitor, ChevronLeft, ChevronRight, TrendingUp, Sun, Moon, Layers, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -19,6 +19,8 @@ const coachNav = [
 
 const studentNav = [
   { to: "/", label: "Mi Entrenamiento", icon: CalendarDays },
+  { to: "/stats", label: "Mi Progresión", icon: TrendingUp },
+  { to: "/profile", label: "Mi Perfil", icon: UserCircle },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
