@@ -9,17 +9,47 @@ import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
  
+const MANUAL_CLIENTS_KEY = "kiosk_manual_clients";
+
+function loadManualClients(today: string): { id: string; name: string }[] {
+  try {
+    const raw = localStorage.getItem(MANUAL_CLIENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    // Solo usar si es del día de hoy
+    if (parsed.date === today) return parsed.clients ?? [];
+    // Si es de otro día, limpiar
+    localStorage.removeItem(MANUAL_CLIENTS_KEY);
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function saveManualClients(today: string, clients: { id: string; name: string }[]) {
+  localStorage.setItem(MANUAL_CLIENTS_KEY, JSON.stringify({ date: today, clients }));
+}
+
 export default function KioskPage() {
   const queryClient = useQueryClient();
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [selectedClientName, setSelectedClientName] = useState("");
-  const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>([]);
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>(() => loadManualClients(today));
+
+  const addManualClient = (client: { id: string; name: string }) => {
+    setManualClients(prev => {
+      if (prev.some(c => c.id === client.id)) return prev;
+      const next = [...prev, client];
+      saveManualClients(today, next);
+      return next;
+    });
+  };
   const [searchOpen, setSearchOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [managingOpen, setManagingOpen] = useState(false);
   const [pendingManualClient, setPendingManualClient] = useState<{ id: string; name: string } | null>(null);
-  const today = format(new Date(), "yyyy-MM-dd");
   const cardRefs = useRef<Map<string, any>>(new Map());
  
   // --- Gestión de grupos de kiosco ---
@@ -294,36 +324,69 @@ export default function KioskPage() {
 
   const logAllSets = useMutation({
     mutationFn: async () => {
-      const allParams: { assigned_workout_id: string; exercise_id: string; set_number: number; reps_done: number; weight_used: number }[] = [];
-      for (const [, card] of cardRefs.current) {
+      // Agrupar por ejercicio para saber sets reales
+      const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number }[] }> = {};
+      for (const [key, card] of cardRefs.current) {
         const sets = card.getSets();
+        byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
+      }
+
+      // 1. Guardar workout_logs
+      for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
         for (const s of sets) {
-          allParams.push({
-            assigned_workout_id: card.assignedWorkoutId,
-            exercise_id: card.exerciseId,
-            set_number: s.set_number,
-            reps_done: s.reps_done,
-            weight_used: s.weight_used,
-          });
+          const existing = existingLogs?.find(
+            l => l.assigned_workout_id === assignedWorkoutId &&
+              l.exercise_id === exerciseId &&
+              l.set_number === s.set_number
+          );
+          if (existing) {
+            await supabase.from("workout_logs").update({
+              reps_done: s.reps_done, weight_used: s.weight_used, completed: true,
+            }).eq("id", existing.id);
+          } else {
+            await supabase.from("workout_logs").insert({
+              assigned_workout_id: assignedWorkoutId,
+              exercise_id: exerciseId,
+              set_number: s.set_number,
+              reps_done: s.reps_done,
+              weight_used: s.weight_used,
+              completed: true,
+            });
+          }
         }
       }
-      for (const params of allParams) {
-        const existing = existingLogs?.find(
-          l => l.assigned_workout_id === params.assigned_workout_id &&
-            l.exercise_id === params.exercise_id &&
-            l.set_number === params.set_number
-        );
+
+      // 2. Sobreescribir assigned_workout_exercises con valores reales
+      for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
+        const totalSets = sets.length;
+        const reps = sets[0]?.reps_done ?? 0;
+        const weight = sets[0]?.weight_used ?? 0;
+
+        const { data: existing } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId)
+          .eq("exercise_id", exerciseId)
+          .maybeSingle();
+
         if (existing) {
-          await supabase.from("workout_logs").update({
-            reps_done: params.reps_done, weight_used: params.weight_used, completed: true,
-          }).eq("id", existing.id);
+          await supabase.from("assigned_workout_exercises")
+            .update({ sets: totalSets, reps, weight })
+            .eq("id", existing.id);
         } else {
-          await supabase.from("workout_logs").insert({ ...params, completed: true });
+          await supabase.from("assigned_workout_exercises").insert({
+            assigned_workout_id: assignedWorkoutId,
+            exercise_id: exerciseId,
+            sets: totalSets,
+            reps,
+            weight,
+          });
         }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["kiosk-assigned-exercises"] });
       toast.success("¡Sesión guardada completa!");
     },
     onError: () => toast.error("Error al guardar la sesión"),
@@ -567,7 +630,7 @@ export default function KioskPage() {
                           const label = (w as any).routines?.name ?? "Entrenamiento libre";
                           if (w.workout_date === today) {
                             // Ya es de hoy → no borrar ni recrear, usar directamente
-                            setManualClients(prev => [...prev, pendingManualClient]);
+                            addManualClient(pendingManualClient);
                             queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
                             toast.success(`${pendingManualClient.name} — "${label}" cargado`);
                             setPendingManualClient(null);
@@ -579,7 +642,7 @@ export default function KioskPage() {
                               dayNumber: (w as any).day_number ?? 1,
                               sourceWorkoutId: w.id,
                             });
-                            setManualClients(prev => [...prev, pendingManualClient]);
+                            addManualClient(pendingManualClient);
                             queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", pendingManualClient.id, today] });
                             toast.success(`${pendingManualClient.name} — "${label}" asignado para hoy`);
                             setPendingManualClient(null);
@@ -647,7 +710,7 @@ export default function KioskPage() {
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1"
                   onClick={() => {
-                    setManualClients(prev => [...prev, pendingManualClient]);
+                    addManualClient(pendingManualClient);
                     toast.success(`${pendingManualClient.name} agregado sin entrenamiento`);
                     setPendingManualClient(null);
                     setClientSearch("");
