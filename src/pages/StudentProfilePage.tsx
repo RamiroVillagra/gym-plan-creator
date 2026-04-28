@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -35,24 +35,25 @@ export default function StudentProfilePage() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (data: any) => {
-      if (data && !loaded) {
-        setForm({
-          name: data.name ?? "",
-          phone: data.phone ?? "",
-          weight: data.weight != null ? String(data.weight) : "",
-          height: data.height != null ? String(data.height) : "",
-          birth_date: data.birth_date ?? "",
-          goal: data.goal ?? "",
-        });
-        setLoaded(true);
-      }
-    },
-  } as any);
+  });
+
+  useEffect(() => {
+    if (client && !loaded) {
+      setForm({
+        name: (client as any).name ?? "",
+        phone: (client as any).phone ?? "",
+        weight: (client as any).weight != null ? String((client as any).weight) : "",
+        height: (client as any).height != null ? String((client as any).height) : "",
+        birth_date: (client as any).birth_date ?? "",
+        goal: (client as any).goal ?? "",
+      });
+      setLoaded(true);
+    }
+  }, [client, loaded]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!client?.id) throw new Error("No client found");
+      if (!(client as any)?.id) throw new Error("No client found");
       const { error } = await supabase
         .from("clients")
         .update({
@@ -62,8 +63,8 @@ export default function StudentProfilePage() {
           height: form.height ? parseFloat(form.height) : null,
           birth_date: form.birth_date || null,
           goal: form.goal || null,
-        })
-        .eq("id", client.id);
+        } as any)
+        .eq("id", (client as any).id);
       if (error) throw error;
     },
     onSuccess: () => {
