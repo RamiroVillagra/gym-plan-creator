@@ -1,4 +1,4 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,19 @@ export default function KioskPage() {
   const [selectedClientName, setSelectedClientName] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
   const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>(() => loadManualClients(today));
+
+  // Manejar botón "atrás" del navegador/teléfono
+  useEffect(() => {
+    if (selectedClient) {
+      window.history.pushState({ kioskView: "client" }, "");
+      const handlePopState = () => {
+        setSelectedClient(null);
+        setSelectedClientName("");
+      };
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
+    }
+  }, [selectedClient]);
 
   const addManualClient = (client: { id: string; name: string }) => {
     setManualClients(prev => {
