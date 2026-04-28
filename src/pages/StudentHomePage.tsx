@@ -18,7 +18,7 @@ type ViewMode = "week" | "month";
 export default function StudentHomePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedWorkout, setSelectedWorkout] = useState<any>(null);
   const today = format(new Date(), "yyyy-MM-dd");
@@ -105,12 +105,11 @@ export default function StudentHomePage() {
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Dumbbell className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-heading font-bold">Mi Entrenamiento</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
+      <div className="text-center mb-6">
+        <h1 className="text-3xl font-heading font-bold capitalize">
+          {format(currentDate, "MMMM yyyy", { locale: es })}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1 capitalize">
           {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
         </p>
       </div>
@@ -124,11 +123,6 @@ export default function StudentHomePage() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-medium min-w-[160px] text-center">
-            {viewMode === "week"
-              ? `${format(days[0], "d MMM", { locale: es })} – ${format(days[days.length - 1], "d MMM yyyy", { locale: es })}`
-              : format(currentDate, "MMMM yyyy", { locale: es })}
-          </span>
           <button
             onClick={() => navigate(1)}
             className="p-1.5 rounded-lg border border-border hover:bg-secondary transition-colors"
@@ -182,7 +176,7 @@ export default function StudentHomePage() {
                 onClick={() => {
                   if (hasWorkout) setSelectedWorkout(dayWorkouts[0]);
                 }}
-                className={`rounded-xl p-2 min-h-[72px] flex flex-col transition-colors ${
+                className={`rounded-xl p-1.5 min-h-[64px] flex flex-col overflow-hidden transition-colors ${
                   hasWorkout ? "cursor-pointer" : "cursor-default"
                 } ${
                   isToday
@@ -190,31 +184,33 @@ export default function StudentHomePage() {
                     : hasWorkout
                     ? "border border-primary/30 bg-card hover:bg-primary/5"
                     : "border border-border bg-card/50"
-                } ${!isCurrentMonth ? "opacity-30" : ""}`}
+                } ${!isCurrentMonth ? "opacity-25" : ""}`}
               >
-                {/* Número del día */}
-                <div className="flex items-center justify-between mb-1">
-                  <p className={`text-xs font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
+                {/* Número del día + check */}
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className={`text-xs font-bold leading-none ${isToday ? "text-primary" : "text-foreground"}`}>
                     {format(day, "d")}
                   </p>
                   {isCompleted && (
-                    <CheckCircle2 className="h-3 w-3 text-primary" />
+                    <CheckCircle2 className="h-2.5 w-2.5 text-primary shrink-0" />
                   )}
                 </div>
 
-                {/* Nombre del entrenamiento */}
-                {dayWorkouts.map((w: any) => (
-                  <div key={w.id} className="flex-1">
-                    <p className={`text-[10px] font-semibold leading-tight ${
+                {/* Nombre del entrenamiento — truncado, nunca desborda */}
+                {hasWorkout && dayWorkouts[0] && (
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[9px] font-semibold leading-tight truncate ${
                       isCompleted ? "text-primary" : isToday ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground"
                     }`}>
-                      {w.routines?.name ?? "Entrenamiento"}
+                      {dayWorkouts[0].routines?.name ?? "Libre"}
                     </p>
-                    {(w.routines?.total_days ?? 1) > 1 && (
-                      <p className="text-[9px] text-muted-foreground">Día {w.day_number ?? 1}</p>
+                    {(dayWorkouts[0].routines?.total_days ?? 1) > 1 && (
+                      <p className="text-[8px] text-muted-foreground leading-none mt-0.5">
+                        D{dayWorkouts[0].day_number ?? 1}
+                      </p>
                     )}
                   </div>
-                ))}
+                )}
               </div>
             );
           })}
