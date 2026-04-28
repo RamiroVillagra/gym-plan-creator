@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2 } from "lucide-react";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play } from "lucide-react";
 import { format, addWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -209,7 +209,7 @@ export default function KioskPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
+        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group, video_url)))")
         .eq("client_id", selectedClient!)
         .eq("workout_date", today);
       if (error) throw error;
@@ -224,7 +224,7 @@ export default function KioskPage() {
       const ids = todayWorkouts!.map((w: any) => w.id);
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("*, exercises(name, muscle_group)")
+        .select("*, exercises(name, muscle_group, video_url)")
         .in("assigned_workout_id", ids)
         .order("block_number")
         .order("order_index");
@@ -940,7 +940,14 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="mb-3">
-        <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+          {(exercise as any)?.video_url && (
+            <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
+              <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
+            </a>
+          )}
+        </div>
         {exercise?.muscle_group && (
           <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
         )}

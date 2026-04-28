@@ -10,7 +10,7 @@ import {
   eachDayOfInterval, isSameDay, isSameMonth,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Dumbbell, CheckCircle2, Circle, History, ArrowLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Dumbbell, CheckCircle2, Circle, History, ArrowLeft, Play } from "lucide-react";
 import { toast } from "sonner";
 
 type ViewMode = "week" | "month";
@@ -268,7 +268,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("*, exercises(name, muscle_group)")
+        .select("*, exercises(name, muscle_group, video_url)")
         .eq("assigned_workout_id", workout.id)
         .order("block_number")
         .order("order_index");
@@ -283,7 +283,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("routine_exercises")
-        .select("*, exercises(name, muscle_group)")
+        .select("*, exercises(name, muscle_group, video_url)")
         .eq("routine_id", workout.routine_id)
         .eq("day_number", workout.day_number ?? 1)
         .order("block_number")
@@ -547,7 +547,14 @@ const ExerciseCard = forwardRef(function ExerciseCard({
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+            {(exercise as any)?.video_url && (
+              <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
+                <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
+              </a>
+            )}
+          </div>
           {exercise?.muscle_group && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
           )}

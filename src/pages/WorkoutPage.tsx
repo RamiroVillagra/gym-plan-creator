@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, forwardRef, useImperativeHandle } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { CheckCircle2, Circle, Dumbbell, History } from "lucide-react";
+import { CheckCircle2, Circle, Dumbbell, History, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -15,6 +15,7 @@ export default function WorkoutPage() {
   const queryClient = useQueryClient();
   const [selectedClient, setSelectedClient] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
+  const cardRefs = useRef<Map<string, any>>(new Map());
 
   const { data: myClientId } = useQuery({
     queryKey: ["my-client-id", user?.id],
@@ -42,7 +43,7 @@ export default function WorkoutPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workouts")
-        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group)))")
+        .select("*, routines(name, total_days, routine_exercises(*, exercises(name, muscle_group, video_url)))")
         .eq("client_id", effectiveClientId)
         .eq("workout_date", today);
       if (error) throw error;
@@ -57,7 +58,7 @@ export default function WorkoutPage() {
       const ids = todayWorkouts!.map((w: any) => w.id);
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("*, exercises(name, muscle_group)")
+        .select("*, exercises(name, muscle_group, video_url)")
         .in("assigned_workout_id", ids)
         .order("block_number")
         .order("order_index");
@@ -141,6 +142,75 @@ export default function WorkoutPage() {
     },
   });
 
+  const saveAllSets = useMutation({
+    mutationFn: async () => {
+      const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number }[] }> = {};
+      for (const [key, card] of cardRefs.current) {
+        const sets = card.getSets();
+        byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
+      }
+
+      // 1. Guardar workout_logs
+      for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
+        for (const s of sets) {
+          const existing = existingLogs?.find(
+            (l: any) => l.assigned_workout_id === assignedWorkoutId &&
+              l.exercise_id === exerciseId &&
+              l.set_number === s.set_number
+          );
+          if (existing) {
+            await supabase.from("workout_logs").update({
+              reps_done: s.reps_done, weight_used: s.weight_used, completed: true,
+            }).eq("id", existing.id);
+          } else {
+            await supabase.from("workout_logs").insert({
+              assigned_workout_id: assignedWorkoutId,
+              exercise_id: exerciseId,
+              set_number: s.set_number,
+              reps_done: s.reps_done,
+              weight_used: s.weight_used,
+              completed: true,
+            });
+          }
+        }
+      }
+
+      // 2. Sobreescribir assigned_workout_exercises con valores reales
+      for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
+        const totalSets = sets.length;
+        const reps = sets[0]?.reps_done ?? 0;
+        const weight = sets[0]?.weight_used ?? 0;
+
+        const { data: existing } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId)
+          .eq("exercise_id", exerciseId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase.from("assigned_workout_exercises")
+            .update({ sets: totalSets, reps, weight })
+            .eq("id", existing.id);
+        } else {
+          await supabase.from("assigned_workout_exercises").insert({
+            assigned_workout_id: assignedWorkoutId,
+            exercise_id: exerciseId,
+            sets: totalSets,
+            reps,
+            weight,
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workout-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["workout-assigned-exercises"] });
+      toast.success("¡Sesión guardada completa!");
+    },
+    onError: () => toast.error("Error al guardar la sesión"),
+  });
+
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
       <div className="mb-6">
@@ -206,6 +276,11 @@ export default function WorkoutPage() {
                   {blockExercises.map((re: any) => (
                     <ExerciseCard
                       key={re.id}
+                      ref={(el: any) => {
+                        const key = `${workout.id}-${re.exercise_id}`;
+                        if (el) cardRefs.current.set(key, el);
+                        else cardRefs.current.delete(key);
+                      }}
                       exercise={re.exercises}
                       sets={re.sets}
                       reps={re.reps}
@@ -224,6 +299,14 @@ export default function WorkoutPage() {
                 </div>
               );
             })}
+            <button
+              onClick={() => saveAllSets.mutate()}
+              disabled={saveAllSets.isPending}
+              className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base tracking-wide shadow-md hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 className="h-5 w-5" />
+              {saveAllSets.isPending ? "Guardando..." : "Guardar sesión completa"}
+            </button>
             <WorkoutNotes
               workoutId={workout.id}
               initialNotes={workout.notes ?? ""}
@@ -263,7 +346,7 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
   );
 }
 
-function ExerciseCard({
+const ExerciseCard = forwardRef(function ExerciseCard({
   exercise, sets, reps, weight, unit = "kg", setGroups, assignedWorkoutId, exerciseId, existingLogs, prevLogs, onLogSet
 }: {
   exercise: any; sets: number; reps: number; weight: number | null; unit?: string;
@@ -271,7 +354,7 @@ function ExerciseCard({
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   prevLogs: any[];
   onLogSet: (params: any) => void;
-}) {
+}, ref: any) {
   const [showPrev, setShowPrev] = useState(false);
 
   // Expandir set_groups en filas individuales
@@ -290,11 +373,28 @@ function ExerciseCard({
     })
   );
 
+  useImperativeHandle(ref, () => ({
+    assignedWorkoutId,
+    exerciseId,
+    getSets: () => localSets.map((s, i) => ({
+      set_number: i + 1,
+      reps_done: parseInt(s.reps) || 0,
+      weight_used: parseFloat(s.weightDone) || 0,
+    })),
+  }));
+
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+            {(exercise as any)?.video_url && (
+              <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
+                <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
+              </a>
+            )}
+          </div>
           {exercise?.muscle_group && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
           )}
@@ -387,4 +487,4 @@ function ExerciseCard({
       </div>
     </div>
   );
-}
+});

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, Pencil, Tag, X, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Tag, X, ChevronDown, ChevronRight, AlertTriangle, Play } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -16,6 +16,7 @@ export default function ExercisesPage() {
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
 
   // Edit exercise
   const [editOpen, setEditOpen] = useState(false);
@@ -23,6 +24,7 @@ export default function ExercisesPage() {
   const [editName, setEditName] = useState("");
   const [editCategoryId, setEditCategoryId] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editVideoUrl, setEditVideoUrl] = useState("");
 
   // Category management
   const [catOpen, setCatOpen] = useState(false);
@@ -102,12 +104,13 @@ export default function ExercisesPage() {
         category_id: categoryId || null,
         muscle_group: categoryId ? categories?.find(c => c.id === categoryId)?.name ?? null : null,
         description: description || null,
-      });
+        video_url: videoUrl || null,
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
-      setName(""); setCategoryId(""); setDescription("");
+      setName(""); setCategoryId(""); setDescription(""); setVideoUrl("");
       setOpen(false);
       toast.success("Ejercicio agregado");
     },
@@ -121,7 +124,8 @@ export default function ExercisesPage() {
         category_id: editCategoryId || null,
         muscle_group: editCategoryId ? categories?.find(c => c.id === editCategoryId)?.name ?? null : null,
         description: editDescription || null,
-      }).eq("id", editId);
+        video_url: editVideoUrl || null,
+      } as any).eq("id", editId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -237,7 +241,14 @@ export default function ExercisesPage() {
   const renderExercise = (ex: any) => (
     <div key={ex.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors">
       <div>
-        <p className="font-medium text-foreground">{ex.name}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium text-foreground">{ex.name}</p>
+          {ex.video_url && (
+            <a href={ex.video_url} target="_blank" rel="noopener noreferrer" title="Ver video">
+              <Play className="h-3.5 w-3.5 text-primary hover:text-primary/70 transition-colors" />
+            </a>
+          )}
+        </div>
         <div className="flex gap-2 mt-1">
           {ex.description && <span className="text-xs text-muted-foreground">{ex.description}</span>}
         </div>
@@ -248,6 +259,7 @@ export default function ExercisesPage() {
           setEditName(ex.name);
           setEditCategoryId((ex as any).category_id ?? "");
           setEditDescription(ex.description ?? "");
+          setEditVideoUrl((ex as any).video_url ?? "");
           setEditOpen(true);
         }}>
           <Pencil className="h-4 w-4 text-muted-foreground" />
@@ -287,6 +299,7 @@ export default function ExercisesPage() {
                   {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <Input placeholder="Descripción (opcional)" value={description} onChange={e => setDescription(e.target.value)} />
+                <Input placeholder="Link de YouTube (opcional)" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} type="url" />
                 <Button className="w-full" onClick={() => addExercise.mutate()} disabled={!name.trim()}>Guardar</Button>
               </div>
             </DialogContent>
@@ -346,6 +359,7 @@ export default function ExercisesPage() {
               {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <Input placeholder="Descripción" value={editDescription} onChange={e => setEditDescription(e.target.value)} />
+            <Input placeholder="Link de YouTube (opcional)" value={editVideoUrl} onChange={e => setEditVideoUrl(e.target.value)} type="url" />
             <Button className="w-full" onClick={() => updateExercise.mutate()} disabled={!editName.trim()}>Guardar</Button>
           </div>
         </DialogContent>
