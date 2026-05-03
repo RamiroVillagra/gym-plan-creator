@@ -337,20 +337,11 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
 
   const logSet = useMutation({
     mutationFn: async (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => {
-      const existing = existingLogs?.find(
-        (l: any) => l.exercise_id === params.exercise_id && l.set_number === params.set_number
+      const { error } = await supabase.from("workout_logs").upsert(
+        { ...params, assigned_workout_id: workout.id, completed: true },
+        { onConflict: "assigned_workout_id,exercise_id,set_number" }
       );
-      if (existing) {
-        const { error } = await supabase.from("workout_logs").update({
-          reps_done: params.reps_done, weight_used: params.weight_used, completed: true,
-        }).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("workout_logs").insert({
-          ...params, assigned_workout_id: workout.id, completed: true,
-        });
-        if (error) throw error;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       refetchLogs();
@@ -360,27 +351,25 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
 
   const saveAllSets = useMutation({
     mutationFn: async () => {
+      const rows: any[] = [];
       for (const [, card] of cardRefs.current) {
         const sets = card.getSets();
         for (const s of sets) {
-          const existing = existingLogs?.find(
-            (l: any) => l.exercise_id === card.exerciseId && l.set_number === s.set_number
-          );
-          if (existing) {
-            await supabase.from("workout_logs").update({
-              reps_done: s.reps_done, weight_used: s.weight_used, completed: true,
-            }).eq("id", existing.id);
-          } else {
-            await supabase.from("workout_logs").insert({
-              assigned_workout_id: workout.id,
-              exercise_id: card.exerciseId,
-              set_number: s.set_number,
-              reps_done: s.reps_done,
-              weight_used: s.weight_used,
-              completed: true,
-            });
-          }
+          rows.push({
+            assigned_workout_id: workout.id,
+            exercise_id: card.exerciseId,
+            set_number: s.set_number,
+            reps_done: s.reps_done,
+            weight_used: s.weight_used,
+            completed: true,
+          });
         }
+      }
+      if (rows.length) {
+        const { error } = await supabase.from("workout_logs").upsert(
+          rows, { onConflict: "assigned_workout_id,exercise_id,set_number" }
+        );
+        if (error) throw error;
       }
     },
     onSuccess: () => {

@@ -121,20 +121,11 @@ export default function WorkoutPage() {
       assigned_workout_id: string; exercise_id: string;
       set_number: number; reps_done: number; weight_used: number;
     }) => {
-      const existing = existingLogs?.find(
-        l => l.assigned_workout_id === params.assigned_workout_id &&
-          l.exercise_id === params.exercise_id &&
-          l.set_number === params.set_number
+      const { error } = await supabase.from("workout_logs").upsert(
+        { ...params, completed: true },
+        { onConflict: "assigned_workout_id,exercise_id,set_number" }
       );
-      if (existing) {
-        const { error } = await supabase.from("workout_logs").update({
-          reps_done: params.reps_done, weight_used: params.weight_used, completed: true,
-        }).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("workout_logs").insert({ ...params, completed: true });
-        if (error) throw error;
-      }
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workout-logs"] });
@@ -151,28 +142,23 @@ export default function WorkoutPage() {
       }
 
       // 1. Guardar workout_logs
+      const logRows: any[] = [];
       for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
         for (const s of sets) {
-          const existing = existingLogs?.find(
-            (l: any) => l.assigned_workout_id === assignedWorkoutId &&
-              l.exercise_id === exerciseId &&
-              l.set_number === s.set_number
-          );
-          if (existing) {
-            await supabase.from("workout_logs").update({
-              reps_done: s.reps_done, weight_used: s.weight_used, completed: true,
-            }).eq("id", existing.id);
-          } else {
-            await supabase.from("workout_logs").insert({
-              assigned_workout_id: assignedWorkoutId,
-              exercise_id: exerciseId,
-              set_number: s.set_number,
-              reps_done: s.reps_done,
-              weight_used: s.weight_used,
-              completed: true,
-            });
-          }
+          logRows.push({
+            assigned_workout_id: assignedWorkoutId,
+            exercise_id: exerciseId,
+            set_number: s.set_number,
+            reps_done: s.reps_done,
+            weight_used: s.weight_used,
+            completed: true,
+          });
         }
+      }
+      if (logRows.length) {
+        await supabase.from("workout_logs").upsert(
+          logRows, { onConflict: "assigned_workout_id,exercise_id,set_number" }
+        );
       }
 
       // 2. Sobreescribir assigned_workout_exercises con valores reales
