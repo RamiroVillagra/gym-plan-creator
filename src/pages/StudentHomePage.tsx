@@ -448,8 +448,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
         </div>
       )}
 
-      {/* Botón guardar sesión (solo si es hoy o ya pasó) */}
-      {exercises.length > 0 && (workout.workout_date <= today) && (
+      {exercises.length > 0 && (
         <button
           onClick={() => saveAllSets.mutate()}
           disabled={saveAllSets.isPending}
