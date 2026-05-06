@@ -10,15 +10,14 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
  
 const MANUAL_CLIENTS_KEY = "kiosk_manual_clients";
+const RECENT_CLIENTS_KEY = "kiosk_recent_clients";
 
 function loadManualClients(today: string): { id: string; name: string }[] {
   try {
     const raw = localStorage.getItem(MANUAL_CLIENTS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    // Solo usar si es del día de hoy
     if (parsed.date === today) return parsed.clients ?? [];
-    // Si es de otro día, limpiar
     localStorage.removeItem(MANUAL_CLIENTS_KEY);
     return [];
   } catch {
@@ -30,6 +29,17 @@ function saveManualClients(today: string, clients: { id: string; name: string }[
   localStorage.setItem(MANUAL_CLIENTS_KEY, JSON.stringify({ date: today, clients }));
 }
 
+function loadRecentClients(): { id: string; name: string }[] {
+  try {
+    const raw = localStorage.getItem(RECENT_CLIENTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveRecentClients(clients: { id: string; name: string }[]) {
+  localStorage.setItem(RECENT_CLIENTS_KEY, JSON.stringify(clients));
+}
+
 export default function KioskPage() {
   const queryClient = useQueryClient();
   const [selectedGroup, setSelectedGroup] = useState("");
@@ -37,6 +47,7 @@ export default function KioskPage() {
   const [selectedClientName, setSelectedClientName] = useState("");
   const today = format(new Date(), "yyyy-MM-dd");
   const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>(() => loadManualClients(today));
+  const [recentClients, setRecentClients] = useState<{ id: string; name: string }[]>(() => loadRecentClients());
 
   // Manejar botón "atrás" del navegador/teléfono
   useEffect(() => {
@@ -50,6 +61,17 @@ export default function KioskPage() {
       return () => window.removeEventListener("popstate", handlePopState);
     }
   }, [selectedClient]);
+
+  const openClient = (client: { id: string; name: string }) => {
+    setSelectedClient(client.id);
+    setSelectedClientName(client.name);
+    setRecentClients(prev => {
+      const filtered = prev.filter(c => c.id !== client.id);
+      const next = [client, ...filtered].slice(0, 5);
+      saveRecentClients(next);
+      return next;
+    });
+  };
 
   const addManualClient = (client: { id: string; name: string }) => {
     setManualClients(prev => {
@@ -472,6 +494,24 @@ export default function KioskPage() {
           </span>
         </div>
  
+        {recentClients.filter(c => c.id !== selectedClient).length > 0 && (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="text-xs text-muted-foreground shrink-0">Recientes:</span>
+            {recentClients.filter(c => c.id !== selectedClient).map(c => (
+              <button
+                key={c.id}
+                onClick={() => openClient(c)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary hover:bg-primary/10 hover:text-primary border border-border text-sm font-medium transition-colors"
+              >
+                <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                  {c.name.charAt(0).toUpperCase()}
+                </span>
+                {c.name.split(" ")[0]}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-2 mb-6">
           <Dumbbell className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
@@ -780,10 +820,7 @@ export default function KioskPage() {
             {allKioskClients.map(c => (
               <button
                 key={c.id}
-                onClick={() => {
-                  setSelectedClient(c.id);
-                  setSelectedClientName(c.name);
-                }}
+                onClick={() => openClient(c)}
                 className="bg-card border border-border rounded-xl p-6 text-center hover:border-primary hover:bg-primary/5 transition-colors"
               >
                 <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 text-lg font-bold">
