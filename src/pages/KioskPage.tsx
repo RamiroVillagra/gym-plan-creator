@@ -241,15 +241,14 @@ export default function KioskPage() {
   });
  
   const { data: assignedExercises } = useQuery({
-    queryKey: ["kiosk-assigned-exercises", selectedClient, today],
-    enabled: !!selectedClient,
-    staleTime: 60_000,
+    queryKey: ["kiosk-assigned-exercises", todayWorkouts?.map((w: any) => w.id)],
+    enabled: !!todayWorkouts?.length,
     queryFn: async () => {
+      const ids = todayWorkouts!.map((w: any) => w.id);
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("*, exercises(name, muscle_group, video_url), assigned_workouts!inner(id, client_id, workout_date)")
-        .eq("assigned_workouts.client_id", selectedClient!)
-        .eq("assigned_workouts.workout_date", today)
+        .select("*, exercises(name, muscle_group, video_url)")
+        .in("assigned_workout_id", ids)
         .order("block_number")
         .order("order_index");
       if (error) throw error;
@@ -258,14 +257,14 @@ export default function KioskPage() {
   });
 
   const { data: existingLogs } = useQuery({
-    queryKey: ["kiosk-logs", selectedClient, today],
-    enabled: !!selectedClient,
+    queryKey: ["kiosk-logs", todayWorkouts?.map((w: any) => w.id)],
+    enabled: !!todayWorkouts?.length,
     queryFn: async () => {
+      const ids = todayWorkouts!.map((w: any) => w.id);
       const { data, error } = await supabase
         .from("workout_logs")
-        .select("*, assigned_workouts!inner(client_id, workout_date)")
-        .eq("assigned_workouts.client_id", selectedClient!)
-        .eq("assigned_workouts.workout_date", today);
+        .select("*")
+        .in("assigned_workout_id", ids);
       if (error) throw error;
       return data;
     },
@@ -438,8 +437,9 @@ export default function KioskPage() {
   // Prefetch workouts for all clients in the group so tapping is instant
   useEffect(() => {
     if (!allKioskClients.length) return;
-    allKioskClients.forEach(c => {
-      queryClient.prefetchQuery({
+    allKioskClients.forEach(async c => {
+      // 1. Prefetch todayWorkouts first to get IDs
+      const workouts = await queryClient.fetchQuery({
         queryKey: ["kiosk-workouts", c.id, today],
         staleTime: 60_000,
         queryFn: async () => {
@@ -450,30 +450,31 @@ export default function KioskPage() {
             .eq("workout_date", today);
           return data ?? [];
         },
-      });
+      }) as any[];
+      if (!workouts?.length) return;
+      const ids = workouts.map((w: any) => w.id);
+      // 2. Prefetch assignedExercises and existingLogs using exact IDs
       queryClient.prefetchQuery({
-        queryKey: ["kiosk-assigned-exercises", c.id, today],
+        queryKey: ["kiosk-assigned-exercises", ids],
         staleTime: 60_000,
         queryFn: async () => {
           const { data } = await supabase
             .from("assigned_workout_exercises")
-            .select("*, exercises(name, muscle_group, video_url), assigned_workouts!inner(id, client_id, workout_date)")
-            .eq("assigned_workouts.client_id", c.id)
-            .eq("assigned_workouts.workout_date", today)
+            .select("*, exercises(name, muscle_group, video_url)")
+            .in("assigned_workout_id", ids)
             .order("block_number")
             .order("order_index");
           return data ?? [];
         },
       });
       queryClient.prefetchQuery({
-        queryKey: ["kiosk-logs", c.id, today],
+        queryKey: ["kiosk-logs", ids],
         staleTime: 60_000,
         queryFn: async () => {
           const { data } = await supabase
             .from("workout_logs")
-            .select("*, assigned_workouts!inner(client_id, workout_date)")
-            .eq("assigned_workouts.client_id", c.id)
-            .eq("assigned_workouts.workout_date", today);
+            .select("*")
+            .in("assigned_workout_id", ids);
           return data ?? [];
         },
       });
