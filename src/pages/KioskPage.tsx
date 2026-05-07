@@ -1,6 +1,7 @@
 import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play } from "lucide-react";
@@ -485,38 +486,41 @@ export default function KioskPage() {
   // --- Vista de entrenamiento del alumno ---
   if (selectedClient) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => setSelectedClient(null)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />Volver
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
-          </span>
-        </div>
- 
-        {recentClients.filter(c => c.id !== selectedClient).length > 0 && (
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <span className="text-xs text-muted-foreground shrink-0">Recientes:</span>
-            {recentClients.filter(c => c.id !== selectedClient).map(c => (
-              <button
-                key={c.id}
-                onClick={() => openClient(c)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary hover:bg-primary/10 hover:text-primary border border-border text-sm font-medium transition-colors"
-              >
-                <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
-                  {c.name.charAt(0).toUpperCase()}
-                </span>
-                {c.name.split(" ")[0]}
-              </button>
-            ))}
+      <div className="flex gap-4 items-start">
+        {/* Contenido principal */}
+        <div className="flex-1 min-w-0 max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <Button variant="ghost" onClick={() => setSelectedClient(null)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />Volver
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+            </span>
           </div>
-        )}
 
-        <div className="flex items-center gap-2 mb-6">
-          <Dumbbell className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
-        </div>
+          {/* Recientes — solo en mobile (el sidebar cubre esta función en desktop) */}
+          {allKioskClients.length <= 1 && recentClients.filter(c => c.id !== selectedClient).length > 0 && (
+            <div className="flex md:hidden items-center gap-2 mb-4 flex-wrap">
+              <span className="text-xs text-muted-foreground shrink-0">Recientes:</span>
+              {recentClients.filter(c => c.id !== selectedClient).map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => openClient(c)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary hover:bg-primary/10 hover:text-primary border border-border text-sm font-medium transition-colors"
+                >
+                  <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {c.name.charAt(0).toUpperCase()}
+                  </span>
+                  {c.name.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mb-6">
+            <Dumbbell className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
+          </div>
  
         {!todayWorkouts?.length ? (
           <div className="text-center py-12 text-muted-foreground">
@@ -600,6 +604,34 @@ export default function KioskPage() {
               </div>
             );
           })
+        )}
+        </div>{/* end main content */}
+
+        {/* Sidebar derecho — turno completo */}
+        {allKioskClients.length > 1 && (
+          <div className="hidden md:flex flex-col gap-1 w-28 shrink-0 sticky top-4 max-h-screen overflow-y-auto pt-1">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1">Turno</p>
+            {allKioskClients.map(c => (
+              <button
+                key={c.id}
+                onClick={() => openClient(c)}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-2 rounded-xl text-left transition-colors w-full",
+                  c.id === selectedClient
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary hover:bg-primary/10 hover:text-primary"
+                )}
+              >
+                <span className={cn(
+                  "w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0",
+                  c.id === selectedClient ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/15 text-primary"
+                )}>
+                  {c.name.charAt(0).toUpperCase()}
+                </span>
+                <span className="text-xs font-medium truncate">{c.name.split(" ")[0]}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
     );
