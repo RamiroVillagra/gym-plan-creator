@@ -18,11 +18,14 @@ import RoutineDetailView from "@/components/RoutineDetailView";
 
 type ViewMode = "month" | "week" | "day";
 
-type UndoEntry =
+export type UndoEntry =
   | { type: "create"; label: string; workoutId: string }
   | { type: "delete"; label: string; workout: any; exercises: any[] }
   | { type: "update"; label: string; workoutId: string; prevRoutineId: string | null; prevDayNumber: number }
-  | { type: "ids"; label: string; ids: string[] };
+  | { type: "ids"; label: string; ids: string[] }
+  | { type: "awe-add"; label: string; ids: string[] }
+  | { type: "awe-delete"; label: string; row: any; table: "assigned_workout_exercises" | "routine_exercises" }
+  | { type: "awe-update"; label: string; id: string; prev: any; table: "assigned_workout_exercises" | "routine_exercises" };
 
 export default function CalendarPage() {
   const { role } = useAuth();
@@ -588,8 +591,17 @@ export default function CalendarPage() {
             }))
           );
         }
+      } else if (entry.type === "awe-add") {
+        await supabase.from("assigned_workout_exercises").delete().in("id", entry.ids);
+      } else if (entry.type === "awe-delete") {
+        const { id: _id, ...rowToInsert } = entry.row;
+        await supabase.from(entry.table).insert(rowToInsert);
+      } else if (entry.type === "awe-update") {
+        await supabase.from(entry.table).update(entry.prev).eq("id", entry.id);
       }
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-workout-exercises"] });
+      queryClient.invalidateQueries({ queryKey: ["routine-exercises"] });
       setUndoStack(rest);
       toast.success(`Deshecho: ${entry.label}`);
     } catch {
@@ -965,6 +977,7 @@ export default function CalendarPage() {
                 assignedWorkoutId={detailWorkout.id}
                 clientId={detailWorkout.client_id}
                 initialDay={detailWorkout.day_number ?? 1}
+                onUndo={pushUndo}
               />
               {role === "coach" && (
                 <div className="mt-4 pt-4 border-t border-border flex gap-2">

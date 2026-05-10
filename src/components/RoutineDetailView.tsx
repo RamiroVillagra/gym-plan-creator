@@ -8,6 +8,7 @@ import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { UndoEntry } from "@/pages/CalendarPage";
 
 interface RoutineDetailViewProps {
   routineId?: string;
@@ -17,9 +18,10 @@ interface RoutineDetailViewProps {
   assignedWorkoutId?: string;
   clientId?: string;
   initialDay?: number;
+  onUndo?: (entry: UndoEntry) => void;
 }
 
-export default function RoutineDetailView({ routineId = "", routineName, totalDays, editable = false, assignedWorkoutId, clientId, initialDay = 1 }: RoutineDetailViewProps) {
+export default function RoutineDetailView({ routineId = "", routineName, totalDays, editable = false, assignedWorkoutId, clientId, initialDay = 1, onUndo }: RoutineDetailViewProps) {
   const queryClient = useQueryClient();
   // Cuando hay un workout asignado con día específico, ese día es fijo
   const isFixedDay = !!assignedWorkoutId;
@@ -228,16 +230,21 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       });
 
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
-      const { error } = await supabase.from(table).insert(rows);
+      const { data: created, error } = await supabase.from(table).insert(rows).select("id");
       if (error) throw error;
+      return { ids: created?.map((r: any) => r.id) ?? [], table };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
+      const count = selectedExercises.size;
       setSelectedExercises(new Set());
       setSets("3"); setReps("10"); setWeight("");
       setFilterCategory(""); setFilterSearch("");
       setAddExOpen(false);
-      toast.success(`${selectedExercises.size} ejercicio${selectedExercises.size > 1 ? "s" : ""} agregado${selectedExercises.size > 1 ? "s" : ""}`);
+      if (isOverrideMode && data?.ids.length) {
+        onUndo?.({ type: "awe-add", label: "Agregar ejercicio", ids: data.ids });
+      }
+      toast.success(`${count} ejercicio${count > 1 ? "s" : ""} agregado${count > 1 ? "s" : ""}`);
     },
   });
 
@@ -247,26 +254,33 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         await ensureOverrides();
         queryClient.invalidateQueries({ queryKey: invalidateKey });
         toast.info("Datos clonados. Intentá de nuevo.");
-        return;
+        return null;
       }
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      // Capture row before deleting for undo
+      const { data: row } = await supabase.from(table).select("*").eq("id", id).single();
       const { error } = await supabase.from(table).delete().eq("id", id);
       if (error) throw error;
+      return { row, table };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
+      if (data?.row && isOverrideMode) {
+        onUndo?.({ type: "awe-delete", label: "Eliminar ejercicio", row: data.row, table: data.table as any });
+      }
     },
   });
 
   const updateExercise = useMutation({
     mutationFn: async ({ id, sets, reps, weight, unit }: { id: string; sets: number; reps: number; weight: number | null; unit: string }) => {
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
         const original = routineExercises?.find((re: any) => re.id === id);
         if (original) {
           const { data: cloned } = await supabase
             .from("assigned_workout_exercises")
-            .select("id")
+            .select("id, sets, reps, weight, unit")
             .eq("assigned_workout_id", assignedWorkoutId!)
             .eq("exercise_id", original.exercise_id)
             .eq("day_number", original.day_number)
@@ -274,26 +288,31 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             .eq("order_index", original.order_index)
             .single();
           if (cloned) {
+            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit };
             const { error } = await supabase
               .from("assigned_workout_exercises")
               .update({ sets, reps, weight, unit })
               .eq("id", cloned.id);
             if (error) throw error;
-            return;
+            return { id: cloned.id, prev, table };
           }
         }
         queryClient.invalidateQueries({ queryKey: invalidateKey });
         toast.info("Datos clonados. Intentá de nuevo.");
-        return;
+        return null;
       }
-
-      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      // Capture prev values before update
+      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit").eq("id", id).single();
       const { error } = await supabase.from(table).update({ sets, reps, weight, unit }).eq("id", id);
       if (error) throw error;
+      return { id, prev: current, table };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
       setEditingId(null);
+      if (data?.prev && isOverrideMode) {
+        onUndo?.({ type: "awe-update", label: "Editar ejercicio", id: data.id, prev: data.prev, table: data.table as any });
+      }
       toast.success("Actualizado");
     },
   });
@@ -365,12 +384,17 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         return;
       }
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const { data: current } = await supabase.from(table).select("set_groups").eq("id", id).single();
       const { error } = await supabase.from(table).update({ set_groups: value }).eq("id", id);
       if (error) throw error;
+      return { id, prev: { set_groups: current?.set_groups ?? null }, table };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
       setEditingGroupsId(null);
+      if (data?.prev && isOverrideMode) {
+        onUndo?.({ type: "awe-update", label: "Editar series", id: data.id, prev: data.prev, table: data.table as any });
+      }
       toast.success("Series guardadas");
     },
     onError: () => toast.error("Error al guardar series"),
