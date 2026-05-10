@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -17,6 +17,12 @@ import {
 import RoutineDetailView from "@/components/RoutineDetailView";
 
 type ViewMode = "month" | "week" | "day";
+
+type UndoEntry =
+  | { type: "create"; label: string; workoutId: string }
+  | { type: "delete"; label: string; workout: any; exercises: any[] }
+  | { type: "update"; label: string; workoutId: string; prevRoutineId: string | null; prevDayNumber: number }
+  | { type: "ids"; label: string; ids: string[] };
 
 export default function CalendarPage() {
   const { role } = useAuth();
@@ -72,6 +78,9 @@ export default function CalendarPage() {
   const [bulkRoutineSearch, setBulkRoutineSearch] = useState("");
   const [bulkDays, setBulkDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
   const [bulkWeeks, setBulkWeeks] = useState("4");
+
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const pushUndo = (entry: UndoEntry) => setUndoStack(prev => [entry, ...prev].slice(0, 5));
 
   const { dateRange, days } = getDateRange(viewMode, currentDate);
 
@@ -129,33 +138,38 @@ export default function CalendarPage() {
 
   const assignWorkout = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("assigned_workouts").insert({
+      const { data, error } = await supabase.from("assigned_workouts").insert({
         client_id: selectedClient,
         routine_id: selectedRoutine || null,
         workout_date: format(selectedDate!, "yyyy-MM-dd"),
         day_number: parseInt(selectedDay) || 1,
-      });
+      }).select().single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setAssignOpen(false);
       setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1");
+      pushUndo({ type: "create", label: "Asignar", workoutId: data.id });
       toast.success("Entrenamiento asignado");
     },
   });
 
   const updateWorkout = useMutation({
     mutationFn: async () => {
+      const prev = { routineId: editingWorkout.routine_id ?? null, dayNumber: editingWorkout.day_number ?? 1 };
       const { error } = await supabase.from("assigned_workouts").update({
         routine_id: editWorkoutRoutine || null,
         day_number: parseInt(editWorkoutDay) || 1,
       }).eq("id", editingWorkout.id);
       if (error) throw error;
+      return { workoutId: editingWorkout.id, ...prev };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setEditWorkoutOpen(false);
+      pushUndo({ type: "update", label: "Editar", workoutId: data.workoutId, prevRoutineId: data.routineId, prevDayNumber: data.dayNumber });
       setEditingWorkout(null);
       toast.success("Entrenamiento actualizado");
     },
@@ -220,7 +234,7 @@ export default function CalendarPage() {
       const { data: newWorkouts, error } = await supabase
         .from("assigned_workouts")
         .insert(inserts)
-        .select();
+        .select("id");
       if (error) throw error;
 
       // Copiar ejercicios correctos a cada nuevo workout
@@ -245,12 +259,13 @@ export default function CalendarPage() {
         }
         if (exerciseInserts.length) await supabase.from("assigned_workout_exercises").insert(exerciseInserts);
       }
+      return newWorkouts?.map((w: any) => w.id) ?? [];
     },
-    onSuccess: () => {
+    onSuccess: (ids) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setCopyOpen(false);
       setCopyDays([]); setCopyWeeks("1");
-
+      if (ids.length) pushUndo({ type: "ids", label: "Copiar", ids });
       toast.success("Entrenamiento copiado");
     },
     onError: () => toast.error("Error al copiar"),
@@ -315,11 +330,13 @@ export default function CalendarPage() {
         }));
         await supabase.from("assigned_workout_exercises").insert(copies);
       }
+      return newWorkout?.id ?? null;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setCopyToClientOpen(false);
       setCopyToClient(""); setCopyToDate("");
+      if (id) pushUndo({ type: "ids", label: "Copiar a alumno", ids: [id] });
       toast.success("Entrenamiento copiado al alumno");
     },
     onError: () => toast.error("Error al copiar"),
@@ -368,26 +385,33 @@ export default function CalendarPage() {
           }
         }
       }
-      const { error } = await supabase.from("assigned_workouts").insert(inserts);
+      const { data: created, error } = await supabase.from("assigned_workouts").insert(inserts).select("id");
       if (error) throw error;
+      return created?.map((w: any) => w.id) ?? [];
     },
-    onSuccess: () => {
+    onSuccess: (ids) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setBulkOpen(false);
       setBulkDays([]); setBulkClient(""); setBulkClientName(""); setBulkClientSearch("");
       setBulkGroup(""); setBulkGroupName(""); setBulkGroupSearch("");
       setBulkRoutine(""); setBulkRoutineName(""); setBulkRoutineSearch(""); setBulkWeeks("4");
+      if (ids.length) pushUndo({ type: "ids", label: "Planificar", ids });
       toast.success("Entrenamientos asignados");
     },
   });
 
   const deleteWorkout = useMutation({
     mutationFn: async (id: string) => {
+      // Capture workout data before deleting for undo
+      const { data: workout } = await supabase.from("assigned_workouts").select("*").eq("id", id).single();
+      const { data: exercises } = await supabase.from("assigned_workout_exercises").select("*").eq("assigned_workout_id", id);
       const { error } = await supabase.from("assigned_workouts").delete().eq("id", id);
       if (error) throw error;
+      return { workout, exercises: exercises ?? [] };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      if (data.workout) pushUndo({ type: "delete", label: "Eliminar", workout: data.workout, exercises: data.exercises });
       toast.success("Eliminado");
     },
   });
@@ -529,6 +553,52 @@ export default function CalendarPage() {
 
   const isClientFiltered = !!filterClient;
 
+  const [undoing, setUndoing] = useState(false);
+  const performUndo = async () => {
+    if (!undoStack.length || undoing) return;
+    const [entry, ...rest] = undoStack;
+    setUndoing(true);
+    try {
+      if (entry.type === "create") {
+        await supabase.from("assigned_workouts").delete().eq("id", entry.workoutId);
+      } else if (entry.type === "ids") {
+        await supabase.from("assigned_workouts").delete().in("id", entry.ids);
+      } else if (entry.type === "update") {
+        await supabase.from("assigned_workouts").update({
+          routine_id: entry.prevRoutineId,
+          day_number: entry.prevDayNumber,
+        }).eq("id", entry.workoutId);
+      } else if (entry.type === "delete") {
+        const { data: restored } = await supabase.from("assigned_workouts").insert({
+          client_id: entry.workout.client_id,
+          routine_id: entry.workout.routine_id,
+          workout_date: entry.workout.workout_date,
+          day_number: entry.workout.day_number,
+          notes: entry.workout.notes,
+        }).select().single();
+        if (restored && entry.exercises.length) {
+          await supabase.from("assigned_workout_exercises").insert(
+            entry.exercises.map((ex: any) => ({
+              assigned_workout_id: restored.id,
+              exercise_id: ex.exercise_id,
+              sets: ex.sets, reps: ex.reps, weight: ex.weight,
+              unit: ex.unit, order_index: ex.order_index,
+              block_number: ex.block_number, day_number: ex.day_number,
+              rest_seconds: ex.rest_seconds,
+            }))
+          );
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setUndoStack(rest);
+      toast.success(`Deshecho: ${entry.label}`);
+    } catch {
+      toast.error("Error al deshacer");
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -540,6 +610,18 @@ export default function CalendarPage() {
         <div className="flex items-center gap-2">
           {role === "coach" && (
             <>
+              {undoStack.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={performUndo}
+                  disabled={undoing}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Undo2 className="h-4 w-4 mr-1" />
+                  {undoing ? "Deshaciendo..." : `Deshacer: ${undoStack[0].label}`}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
