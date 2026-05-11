@@ -237,7 +237,7 @@ export default function CalendarPage() {
       const { data: newWorkouts, error } = await supabase
         .from("assigned_workouts")
         .insert(inserts)
-        .select("id");
+        .select("id, day_number");
       if (error) throw error;
 
       // Copiar ejercicios correctos a cada nuevo workout
@@ -268,7 +268,7 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setCopyOpen(false);
       setCopyDays([]); setCopyWeeks("1");
-      if (ids.length) pushUndo({ type: "ids", label: "Copiar", ids });
+      if (ids?.length) pushUndo({ type: "ids", label: "Copiar", ids });
       toast.success("Entrenamiento copiado");
     },
     onError: () => toast.error("Error al copiar"),
