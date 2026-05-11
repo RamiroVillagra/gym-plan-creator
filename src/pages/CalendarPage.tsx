@@ -87,13 +87,15 @@ export default function CalendarPage() {
 
   const { dateRange, days } = getDateRange(viewMode, currentDate);
 
-  // Week types (carga / descarga)
+  // Week types (carga / descarga) — por alumno
   const { data: weekTypes } = useQuery({
-    queryKey: ["week-types", dateRange.start, dateRange.end],
+    queryKey: ["week-types", dateRange.start, dateRange.end, filterClient],
+    enabled: !!filterClient,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("week_types")
         .select("week_start, type")
+        .eq("client_id", filterClient)
         .gte("week_start", dateRange.start)
         .lte("week_start", dateRange.end);
       if (error) throw error;
@@ -103,13 +105,17 @@ export default function CalendarPage() {
 
   const toggleWeekType = useMutation({
     mutationFn: async (weekStart: string) => {
+      if (!filterClient) return;
       if (weekTypes?.has(weekStart)) {
-        await supabase.from("week_types").delete().eq("week_start", weekStart);
+        await supabase.from("week_types").delete()
+          .eq("week_start", weekStart)
+          .eq("client_id", filterClient);
       } else {
-        await supabase.from("week_types").upsert({ week_start: weekStart, type: "descarga" });
+        await supabase.from("week_types").upsert({ week_start: weekStart, client_id: filterClient, type: "descarga" });
       }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["week-types"] }),
+    onError: () => toast.error("Error al cambiar tipo de semana"),
   });
 
   const { data: clients } = useQuery({
@@ -688,7 +694,7 @@ export default function CalendarPage() {
               {viewMode === "week" && `${format(days[0], "d MMM", { locale: es })} - ${format(days[days.length - 1], "d MMM yyyy", { locale: es })}`}
               {viewMode === "day" && format(currentDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
             </span>
-            {viewMode === "week" && role === "coach" && (() => {
+            {viewMode === "week" && role === "coach" && !!filterClient && (() => {
               const wk = format(startOfWeek(days[0], { weekStartsOn: 1 }), "yyyy-MM-dd");
               const isDeload = weekTypes?.has(wk) ?? false;
               return (
@@ -796,8 +802,8 @@ export default function CalendarPage() {
               const isDeload = weekTypes?.has(weekStartStr) ?? false;
               return (
                 <div key={weekStartStr} className={`flex gap-1 rounded-lg transition-colors ${isDeload ? "ring-2 ring-amber-400/70 ring-offset-1 ring-offset-background" : ""}`}>
-                  {/* Week type toggle */}
-                  {role === "coach" ? (
+                  {/* Week type toggle — solo visible con alumno filtrado */}
+                  {role === "coach" && !!filterClient ? (
                     <button
                       title={isDeload ? "Semana de descarga — click para cambiar a carga" : "Semana de carga — click para marcar como descarga"}
                       onClick={() => toggleWeekType.mutate(weekStartStr)}
