@@ -85,6 +85,8 @@ export default function CalendarPage() {
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const pushUndo = (entry: UndoEntry) => setUndoStack(prev => [entry, ...prev].slice(0, 5));
 
+  const { dateRange, days } = getDateRange(viewMode, currentDate);
+
   // Week types (carga / descarga)
   const { data: weekTypes } = useQuery({
     queryKey: ["week-types", dateRange.start, dateRange.end],
@@ -109,8 +111,6 @@ export default function CalendarPage() {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["week-types"] }),
   });
-
-  const { dateRange, days } = getDateRange(viewMode, currentDate);
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
