@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2, Zap, Battery } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -84,6 +84,31 @@ export default function CalendarPage() {
 
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const pushUndo = (entry: UndoEntry) => setUndoStack(prev => [entry, ...prev].slice(0, 5));
+
+  // Week types (carga / descarga)
+  const { data: weekTypes } = useQuery({
+    queryKey: ["week-types", dateRange.start, dateRange.end],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("week_types")
+        .select("week_start, type")
+        .gte("week_start", dateRange.start)
+        .lte("week_start", dateRange.end);
+      if (error) throw error;
+      return new Set<string>(data?.map((r: any) => r.week_start) ?? []);
+    },
+  });
+
+  const toggleWeekType = useMutation({
+    mutationFn: async (weekStart: string) => {
+      if (weekTypes?.has(weekStart)) {
+        await supabase.from("week_types").delete().eq("week_start", weekStart);
+      } else {
+        await supabase.from("week_types").upsert({ week_start: weekStart, type: "descarga" });
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["week-types"] }),
+  });
 
   const { dateRange, days } = getDateRange(viewMode, currentDate);
 
@@ -657,11 +682,30 @@ export default function CalendarPage() {
           <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground min-w-[180px] text-center font-medium">
-            {viewMode === "month" && format(currentDate, "MMMM yyyy", { locale: es })}
-            {viewMode === "week" && `${format(days[0], "d MMM", { locale: es })} - ${format(days[days.length - 1], "d MMM yyyy", { locale: es })}`}
-            {viewMode === "day" && format(currentDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
-          </span>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-sm text-muted-foreground min-w-[180px] text-center font-medium">
+              {viewMode === "month" && format(currentDate, "MMMM yyyy", { locale: es })}
+              {viewMode === "week" && `${format(days[0], "d MMM", { locale: es })} - ${format(days[days.length - 1], "d MMM yyyy", { locale: es })}`}
+              {viewMode === "day" && format(currentDate, "EEEE d 'de' MMMM yyyy", { locale: es })}
+            </span>
+            {viewMode === "week" && role === "coach" && (() => {
+              const wk = format(startOfWeek(days[0], { weekStartsOn: 1 }), "yyyy-MM-dd");
+              const isDeload = weekTypes?.has(wk) ?? false;
+              return (
+                <button
+                  onClick={() => toggleWeekType.mutate(wk)}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${
+                    isDeload
+                      ? "bg-amber-400/20 text-amber-500 hover:bg-amber-400/30"
+                      : "bg-secondary text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {isDeload ? <Battery className="h-2.5 w-2.5" /> : <Zap className="h-2.5 w-2.5" />}
+                  {isDeload ? "Descarga" : "Carga"}
+                </button>
+              );
+            })()}
+          </div>
           <Button variant="outline" size="icon" onClick={() => navigate(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -738,13 +782,40 @@ export default function CalendarPage() {
         />
       ) : (
         <div>
-          <div className="grid grid-cols-7 gap-1 mb-1">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 gap-1 mb-1 ml-6">
             {dayNames.map(d => (
               <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
-            {days.map(day => {
+          {/* Week rows */}
+          <div className="space-y-1">
+            {Array.from({ length: Math.ceil(days.length / 7) }, (_, wi) => {
+              const weekDays = days.slice(wi * 7, wi * 7 + 7);
+              const weekStartStr = format(startOfWeek(weekDays[0], { weekStartsOn: 1 }), "yyyy-MM-dd");
+              const isDeload = weekTypes?.has(weekStartStr) ?? false;
+              return (
+                <div key={weekStartStr} className={`flex gap-1 rounded-lg transition-colors ${isDeload ? "ring-2 ring-amber-400/70 ring-offset-1 ring-offset-background" : ""}`}>
+                  {/* Week type toggle */}
+                  {role === "coach" ? (
+                    <button
+                      title={isDeload ? "Semana de descarga — click para cambiar a carga" : "Semana de carga — click para marcar como descarga"}
+                      onClick={() => toggleWeekType.mutate(weekStartStr)}
+                      className={`w-5 shrink-0 flex items-center justify-center rounded text-[9px] font-bold transition-colors ${
+                        isDeload
+                          ? "bg-amber-400/20 text-amber-500 hover:bg-amber-400/30"
+                          : "text-muted-foreground/30 hover:text-muted-foreground hover:bg-secondary"
+                      }`}
+                    >
+                      {isDeload ? <Battery className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
+                    </button>
+                  ) : (
+                    <div className="w-5 shrink-0 flex items-center justify-center">
+                      {isDeload && <Battery className="h-3 w-3 text-amber-400" />}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-7 gap-1 flex-1">
+                    {weekDays.map(day => {
               const dateStr = format(day, "yyyy-MM-dd");
               const dayWorkouts = workouts?.filter((w: any) => w.workout_date === dateStr) ?? [];
               const isToday = isSameDay(day, new Date());
@@ -754,7 +825,7 @@ export default function CalendarPage() {
                 <div
                   key={dateStr}
                   className={`group bg-card border rounded-lg p-2 min-h-[80px] md:min-h-[100px] cursor-pointer transition-colors hover:border-primary/30 ${
-                    isToday ? "border-primary" : "border-border"
+                    isToday ? "border-primary" : isDeload ? "border-amber-400/30" : "border-border"
                   } ${!isCurrentMonth ? "opacity-40" : ""}`}
                   onClick={() => {
                     if (role === "coach") {
@@ -830,6 +901,10 @@ export default function CalendarPage() {
                     {dayWorkouts.length > 3 && (
                       <p className="text-[10px] text-muted-foreground">+{dayWorkouts.length - 3} más</p>
                     )}
+                  </div>
+                </div>
+              );
+                    })}
                   </div>
                 </div>
               );
