@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
@@ -60,6 +60,39 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   // Series progresivas (set_groups)
   const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
   const [editingGroups, setEditingGroups] = useState<{ sets: string; reps: string; weight: string }[]>([]);
+
+  // Peso máximo histórico por ejercicio
+  const [maxWeights, setMaxWeights] = useState<Record<string, number | null | "loading">>({});
+
+  const fetchMaxWeight = async (exerciseId: string) => {
+    // Toggle off if already shown
+    if (maxWeights[exerciseId] !== undefined && maxWeights[exerciseId] !== "loading") {
+      setMaxWeights(prev => { const n = { ...prev }; delete n[exerciseId]; return n; });
+      return;
+    }
+    setMaxWeights(prev => ({ ...prev, [exerciseId]: "loading" }));
+    try {
+      // Step 1: get all workout IDs for this client
+      const { data: workouts } = await supabase
+        .from("assigned_workouts")
+        .select("id")
+        .eq("client_id", clientId!);
+      const ids = workouts?.map((w: any) => w.id) ?? [];
+      if (!ids.length) { setMaxWeights(prev => ({ ...prev, [exerciseId]: null })); return; }
+      // Step 2: get max weight for this exercise in those workouts
+      const { data: logs } = await supabase
+        .from("workout_logs")
+        .select("weight_used")
+        .eq("exercise_id", exerciseId)
+        .in("assigned_workout_id", ids)
+        .not("weight_used", "is", null)
+        .order("weight_used", { ascending: false })
+        .limit(1);
+      setMaxWeights(prev => ({ ...prev, [exerciseId]: logs?.[0]?.weight_used ?? null }));
+    } catch {
+      setMaxWeights(prev => ({ ...prev, [exerciseId]: null }));
+    }
+  };
 
   const isOverrideMode = !!assignedWorkoutId;
 
@@ -680,8 +713,30 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}${re.unit ?? "kg"}` : ""}
                                 </p>
                               )}
+                              {maxWeights[re.exercise_id] !== undefined && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 mt-0.5">
+                                  <Trophy className="h-2.5 w-2.5" />
+                                  {maxWeights[re.exercise_id] === "loading"
+                                    ? "..."
+                                    : maxWeights[re.exercise_id] !== null
+                                      ? `Máx: ${maxWeights[re.exercise_id]} ${re.unit ?? "kg"}`
+                                      : "Sin registros"}
+                                </span>
+                              )}
                             </button>
                             <div className="flex items-center gap-0.5">
+                              {clientId && (() => {
+                                const mw = maxWeights[re.exercise_id];
+                                return (
+                                  <Button
+                                    variant="ghost" size="icon" className="h-6 w-6 relative"
+                                    title="Peso máximo histórico"
+                                    onClick={() => fetchMaxWeight(re.exercise_id)}
+                                  >
+                                    <Trophy className={`h-3 w-3 ${mw !== undefined ? "text-amber-400" : "text-muted-foreground"}`} />
+                                  </Button>
+                                );
+                              })()}
                               {clientId && (
                                 <Button
                                   variant="ghost" size="icon" className="h-6 w-6"
