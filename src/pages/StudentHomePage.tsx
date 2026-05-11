@@ -536,7 +536,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
+            <p className="text-lg font-heading font-bold text-foreground">{exercise?.name}</p>
             {(exercise as any)?.video_url && (
               <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
                 <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
@@ -577,23 +577,24 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       )}
 
       {/* Headers */}
-      <div className="flex items-center gap-3 mb-1">
-        <span className="text-[10px] text-muted-foreground w-12" />
-        <span className="text-[10px] text-muted-foreground w-14 text-center">Reps</span>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] text-muted-foreground w-16" />
+        <span className="text-[10px] text-muted-foreground w-16 text-center">Reps</span>
         <span className="text-[10px] text-muted-foreground w-20 text-center">Planif.</span>
         <span className="text-[10px] text-muted-foreground w-20 text-center">Realiz.</span>
-        <span className="w-5" />
+        <span className="w-7" />
       </div>
 
       <div className="space-y-2">
         {localSets.map((s, i) => {
           const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
           return (
-            <div key={i} className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground w-16">Serie {i + 1}</span>
               <Input
                 type="number"
-                className="w-14 h-8 text-sm text-center"
+                inputMode="numeric"
+                className="w-16 h-10 text-base text-center"
                 value={s.reps}
                 onChange={e => { const n = [...localSets]; n[i].reps = e.target.value; setLocalSets(n); }}
               />
@@ -602,8 +603,9 @@ const ExerciseCard = forwardRef(function ExerciseCard({
               </span>
               <Input
                 type="number"
+                inputMode="numeric"
                 placeholder={unit}
-                className="w-20 h-8 text-sm"
+                className="w-20 h-10 text-base"
                 value={s.weightDone}
                 onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
               />
@@ -614,8 +616,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
                 weight_used: parseFloat(s.weightDone) || 0,
               })}>
                 {isLogged
-                  ? <CheckCircle2 className="h-5 w-5 text-primary" />
-                  : <Circle className="h-5 w-5 text-muted-foreground hover:text-primary" />
+                  ? <CheckCircle2 className="h-7 w-7 text-primary" />
+                  : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />
                 }
               </button>
             </div>

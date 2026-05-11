@@ -113,19 +113,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-card border-b border-border px-4 h-14">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Delta App" className="h-7 w-7 object-contain" />
-          <span className="font-heading text-lg font-bold">Delta App</span>
-        </Link>
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-foreground">
-          {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
-      </div>
+      {/* Mobile header - coaches only */}
+      {role !== "student" && (
+        <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-card border-b border-border px-4 h-14">
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="Delta App" className="h-7 w-7 object-contain" />
+            <span className="font-heading text-lg font-bold">Delta App</span>
+          </Link>
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-foreground">
+            {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
+      )}
 
-      {/* Mobile nav overlay */}
-      {mobileOpen && (
+      {/* Mobile nav overlay - coaches only */}
+      {role !== "student" && mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-background/95 pt-14">
           <nav className="flex flex-col gap-1 p-4">
             {navItems.map((item) => (
@@ -172,8 +174,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
+      {/* Bottom tab bar - students mobile only */}
+      {role === "student" && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex bg-card border-t border-border">
+          {studentNav.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={cn(
+                "flex flex-col items-center justify-center py-2 flex-1 text-xs font-medium transition-colors",
+                location.pathname === item.to
+                  ? "text-primary"
+                  : "text-muted-foreground"
+              )}
+            >
+              <item.icon className="h-5 w-5 mb-0.5" />
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+
       {/* Main content */}
-      <main className="flex-1 md:p-8 p-4 pt-18 md:pt-8 overflow-auto">
+      <main className={cn(
+        "overflow-auto",
+        role === "student"
+          ? "flex-1 px-4 pt-6 pb-24 md:p-8 md:pt-8"
+          : "flex-1 md:p-8 p-4 pt-18 md:pt-8"
+      )}>
         {children}
       </main>
     </div>
