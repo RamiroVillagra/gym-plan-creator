@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .limit(1)
       .maybeSingle();
     setRole((data?.role as UserRole) ?? null);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -41,11 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         if (session?.user) {
           // Use setTimeout to avoid Supabase client deadlock
+          // loading stays true until fetchRole completes
           setTimeout(() => fetchRole(session.user.id), 0);
         } else {
           setRole(null);
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -54,8 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchRole(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
