@@ -26,7 +26,7 @@ const queryClient = new QueryClient();
 function ProtectedRoutes() {
   const { user, role, loading } = useAuth();
 
-  if (loading) {
+  if (loading || (user && role === null)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Cargando...</p>
