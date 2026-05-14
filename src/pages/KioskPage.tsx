@@ -376,9 +376,10 @@ export default function KioskPage() {
         }
       }
       if (logRows.length) {
-        await supabase.from("workout_logs").upsert(
+        const { error: logError } = await supabase.from("workout_logs").upsert(
           logRows, { onConflict: "assigned_workout_id,exercise_id,set_number" }
         );
+        if (logError) throw logError;
       }
 
       // 2. Sobreescribir assigned_workout_exercises con valores reales
@@ -528,7 +529,7 @@ export default function KioskPage() {
             // Prioridad: ejercicios propios (modificados), si no hay fallback a rutina base
             const dayNum = workout.day_number ?? 1;
             const workoutAssigned = (assignedExercises ?? [])
-              .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
+              .filter((e: any) => e.assigned_workout_id === workout.id);
             const exercises = workoutAssigned.length > 0
               ? workoutAssigned
               : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
@@ -644,7 +645,7 @@ export default function KioskPage() {
               <p className="text-sm font-semibold text-foreground">Agregar alumnos a la sesión</p>
               <p className="text-xs text-muted-foreground">Podés agregar varios uno por uno</p>
             </div>
-            <button onClick={() => { setSearchOpen(false); setClientSearch(""); setPendingManualClient(null); setWeekOffset(0); }}>
+            <button onClick={() => { setSearchOpen(false); setClientSearch(""); setPendingManualClient(null); }}>
               <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
@@ -781,7 +782,7 @@ export default function KioskPage() {
                     {upcoming.length > 0 && (
                       <>
                         <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1 pt-2">Próximos</p>
-                        {[...upcoming].reverse().map(w => renderItem(w))}
+                        {[...upcoming].map(w => renderItem(w))}
                       </>
                     )}
                     {past.length > 0 && (
@@ -955,6 +956,11 @@ export default function KioskPage() {
 function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; initialNotes: string; onSave: (notes: string) => void }) {
   const [notes, setNotes] = useState(initialNotes);
   const [saved, setSaved] = useState(true);
+
+  useEffect(() => {
+    setNotes(initialNotes);
+    setSaved(true);
+  }, [workoutId, initialNotes]);
 
   return (
     <div className="bg-card border border-border rounded-xl p-4">
