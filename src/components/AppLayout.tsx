@@ -18,9 +18,9 @@ const coachNav = [
 ];
 
 const studentNav = [
-  { to: "/", label: "Mi Entrenamiento", icon: CalendarDays },
-  { to: "/stats", label: "Mi Progresión", icon: TrendingUp },
-  { to: "/profile", label: "Mi Perfil", icon: UserCircle },
+  { to: "/", label: "Mi Entrenamiento", shortLabel: "Entreno", icon: CalendarDays },
+  { to: "/stats", label: "Mi Progresión", shortLabel: "Progresión", icon: TrendingUp },
+  { to: "/profile", label: "Mi Perfil", shortLabel: "Perfil", icon: UserCircle },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -182,14 +182,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               key={item.to}
               to={item.to}
               className={cn(
-                "flex flex-col items-center justify-center py-2 flex-1 text-xs font-medium transition-colors",
+                "flex flex-col items-center justify-center py-2 flex-1 text-xs font-medium transition-colors min-w-0",
                 location.pathname === item.to
                   ? "text-primary"
                   : "text-muted-foreground"
               )}
             >
-              <item.icon className="h-5 w-5 mb-0.5" />
-              {item.label}
+              <item.icon className="h-5 w-5 mb-0.5 shrink-0" />
+              <span className="truncate w-full text-center px-0.5">{(item as any).shortLabel ?? item.label}</span>
             </Link>
           ))}
         </div>

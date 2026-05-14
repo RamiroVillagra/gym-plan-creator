@@ -1,4 +1,4 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -52,7 +52,7 @@ export default function WorkoutPage() {
   });
 
   const { data: assignedExercises } = useQuery({
-    queryKey: ["workout-assigned-exercises", todayWorkouts?.map((w: any) => w.id)],
+    queryKey: ["workout-assigned-exercises", effectiveClientId, today],
     enabled: !!todayWorkouts?.length,
     queryFn: async () => {
       const ids = todayWorkouts!.map((w: any) => w.id);
@@ -68,7 +68,7 @@ export default function WorkoutPage() {
   });
 
   const { data: existingLogs } = useQuery({
-    queryKey: ["workout-logs", todayWorkouts?.map((w: any) => w.id)],
+    queryKey: ["workout-logs", effectiveClientId, today],
     enabled: !!todayWorkouts?.length,
     queryFn: async () => {
       const workoutIds = todayWorkouts!.map((w: any) => w.id);
@@ -156,9 +156,10 @@ export default function WorkoutPage() {
         }
       }
       if (logRows.length) {
-        await supabase.from("workout_logs").upsert(
+        const { error: logError } = await supabase.from("workout_logs").upsert(
           logRows, { onConflict: "assigned_workout_id,exercise_id,set_number" }
         );
+        if (logError) throw logError;
       }
 
       // 2. Sobreescribir assigned_workout_exercises con valores reales
@@ -235,7 +236,7 @@ export default function WorkoutPage() {
       {todayWorkouts?.map((workout: any) => {
         const dayNum = workout.day_number ?? 1;
         const workoutAssigned = (assignedExercises ?? [])
-          .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
+          .filter((e: any) => e.assigned_workout_id === workout.id);
         const exercises = workoutAssigned.length > 0
           ? workoutAssigned
           : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
@@ -309,6 +310,12 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
   const [notes, setNotes] = useState(initialNotes);
   const [saved, setSaved] = useState(true);
 
+  // Sync notes when switching to a different workout
+  useEffect(() => {
+    setNotes(initialNotes);
+    setSaved(true);
+  }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Comentarios de la sesión</p>
@@ -346,7 +353,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   // Expandir set_groups en filas individuales
   const allSets = setGroups?.length
     ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
-    : Array.from({ length: sets }, () => ({ targetReps: reps, targetWeight: weight }));
+    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: weight }));
 
   const [localSets, setLocalSets] = useState<{ reps: string; weightDone: string }[]>(
     allSets.map((s, i) => {

@@ -58,11 +58,13 @@ export default function StudentHomePage() {
   });
 
   // Logs para saber cuáles días ya fueron completados
+  const workoutIds = workouts?.map((w: any) => w.id) ?? [];
   const { data: completedWorkoutIds } = useQuery({
-    queryKey: ["student-completed", workouts?.map((w: any) => w.id)],
+    queryKey: ["student-completed", clientId, start, end],
     enabled: !!workouts?.length,
     queryFn: async () => {
-      const ids = workouts!.map((w: any) => w.id);
+      const ids = workoutIds;
+      if (!ids.length) return new Set<string>();
       const { data } = await supabase
         .from("workout_logs")
         .select("assigned_workout_id")
@@ -97,7 +99,10 @@ export default function StudentHomePage() {
         workout={selectedWorkout}
         clientId={clientId!}
         onBack={() => setSelectedWorkout(null)}
-        onSaved={() => queryClient.invalidateQueries({ queryKey: ["student-completed"] })}
+        onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ["student-completed"] });
+            queryClient.invalidateQueries({ queryKey: ["student-workouts"] });
+          }}
       />
     );
   }
@@ -474,6 +479,12 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
 function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; initialNotes: string; onSave: (notes: string) => void }) {
   const [notes, setNotes] = useState(initialNotes);
   const [saved, setSaved] = useState(true);
+
+  // Sync notes when navigating to a different workout
+  useEffect(() => {
+    setNotes(initialNotes);
+    setSaved(true);
+  }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="bg-card border border-border rounded-xl p-4 mt-4">
       <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Comentarios de la sesión</p>
