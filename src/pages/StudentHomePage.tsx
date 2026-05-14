@@ -202,7 +202,7 @@ export default function StudentHomePage() {
                     <p className={`text-[9px] font-semibold leading-tight truncate ${
                       isCompleted ? "text-primary" : isToday ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground"
                     }`}>
-                      {dayWorkouts[0].routines?.name ?? "Libre"}
+                      {dayWorkouts[0].routines?.name ?? "Sesión"}
                     </p>
                     {(dayWorkouts[0].routines?.total_days ?? 1) > 1 && (
                       <p className="text-[8px] text-muted-foreground leading-none mt-0.5">
@@ -235,7 +235,7 @@ export default function StudentHomePage() {
                 className="w-full flex items-center justify-between bg-primary text-primary-foreground rounded-xl px-4 py-3.5 font-semibold hover:bg-primary/90 transition-colors"
               >
                 <div className="text-left">
-                  <p className="font-bold">{w.routines?.name ?? "Entrenamiento libre"}</p>
+                  <p className="font-bold">{w.routines?.name ?? "Sesión"}</p>
                   {(w.routines?.total_days ?? 1) > 1 && (
                     <p className="text-xs opacity-80">Día {w.day_number ?? 1}</p>
                   )}
