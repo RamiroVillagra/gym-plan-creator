@@ -204,6 +204,7 @@ export default function StatsPage() {
                   tickLine={false}
                   tickFormatter={v => `${v}kg`}
                   width={48}
+                  domain={[(dataMin: number) => dataMin - 5, (dataMax: number) => dataMax + 5]}
                 />
                 <Tooltip
                   contentStyle={{

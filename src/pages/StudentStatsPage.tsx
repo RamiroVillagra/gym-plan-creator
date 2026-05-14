@@ -149,6 +149,7 @@ export default function StudentStatsPage() {
                   axisLine={false} tickLine={false}
                   tickFormatter={v => `${v}kg`}
                   width={44}
+                  domain={[(dataMin: number) => dataMin - 5, (dataMax: number) => dataMax + 5]}
                 />
                 <Tooltip
                   contentStyle={{
