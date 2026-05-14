@@ -3,13 +3,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { User, Save, Sun, Moon } from "lucide-react";
+import { User, Save, Sun, Moon, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function StudentProfilePage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -164,6 +164,15 @@ export default function StudentProfilePage() {
           >
             <Save className="h-4 w-4 mr-2" />
             {saveMutation.isPending ? "Guardando..." : "Guardar cambios"}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={signOut}
+            className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Cerrar sesión
           </Button>
         </div>
       )}
