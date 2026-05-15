@@ -1031,9 +1031,6 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
             </a>
           )}
         </div>
-        {exercise?.muscle_group && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
-        )}
         {setGroups?.length ? (
           setGroups.map((g, i) => (
             <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${unit}` : ""}</p>
