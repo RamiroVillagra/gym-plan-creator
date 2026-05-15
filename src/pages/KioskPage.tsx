@@ -166,6 +166,7 @@ export default function KioskPage() {
           block_number: ex.block_number,
           day_number: ex.day_number,
           rest_seconds: ex.rest_seconds,
+          set_groups: ex.set_groups ?? null,
         }));
         await supabase.from("assigned_workout_exercises").insert(copies);
       } else if (newWorkout) {
@@ -187,6 +188,7 @@ export default function KioskPage() {
             block_number: ex.block_number,
             day_number: ex.day_number,
             rest_seconds: ex.rest_seconds,
+            set_groups: ex.set_groups ?? null,
           }));
           await supabase.from("assigned_workout_exercises").insert(copies);
         }
