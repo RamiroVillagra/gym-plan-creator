@@ -569,35 +569,34 @@ export default function ClientsPage() {
             </button>
           ))}
         </div>
-
-        {/* Info dialog */}
-        <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-primary" />
-                {infoClient?.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <textarea
-                className="w-full min-h-[140px] rounded-lg border border-input bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Ej: lesión de rodilla, no puede hacer sentadillas. Objetivo: bajar 5kg. Toma medicación..."
-                value={infoText}
-                onChange={e => setInfoText(e.target.value)}
-                autoFocus
-              />
-              <Button
-                className="w-full"
-                onClick={() => updateInfo.mutate({ id: infoClient.id, notes: infoText })}
-                disabled={updateInfo.isPending}
-              >
-                {updateInfo.isPending ? "Guardando..." : "Guardar"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       )}
+      {/* Info dialog */}
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-primary" />
+              {infoClient?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <textarea
+              className="w-full min-h-[140px] rounded-lg border border-input bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Ej: lesión de rodilla, no puede hacer sentadillas. Objetivo: bajar 5kg. Toma medicación..."
+              value={infoText}
+              onChange={e => setInfoText(e.target.value)}
+              autoFocus
+            />
+            <Button
+              className="w-full"
+              onClick={() => updateInfo.mutate({ id: infoClient.id, notes: infoText })}
+              disabled={updateInfo.isPending}
+            >
+              {updateInfo.isPending ? "Guardando..." : "Guardar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
