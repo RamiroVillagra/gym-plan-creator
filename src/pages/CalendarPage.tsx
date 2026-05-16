@@ -436,6 +436,27 @@ export default function CalendarPage() {
     },
   });
 
+  const quickAddWorkout = useMutation({
+    mutationFn: async (date: Date) => {
+      const dateStr = format(date, "yyyy-MM-dd");
+      const existing = workouts?.find((w: any) => w.workout_date === dateStr);
+      if (existing) return existing;
+      const { data, error } = await supabase
+        .from("assigned_workouts")
+        .insert({ client_id: filterClient, routine_id: null, workout_date: dateStr, day_number: 1 })
+        .select("*, clients(name), routines(name, total_days)")
+        .single();
+      if (error) throw error;
+      pushUndo({ type: "create", label: "Nueva sesión", workoutId: data.id });
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      setDetailWorkout(data);
+    },
+    onError: () => toast.error("Error al crear sesión"),
+  });
+
   const deleteWorkout = useMutation({
     mutationFn: async (id: string) => {
       // Capture workout data before deleting for undo
@@ -781,7 +802,18 @@ export default function CalendarPage() {
           workouts={workouts?.filter((w: any) => w.workout_date === format(currentDate, "yyyy-MM-dd")) ?? []}
           role={role}
           isClientFiltered={isClientFiltered}
-          onAdd={() => { setSelectedDate(currentDate); setSelectedClient(filterClient || ""); setSelectedRoutine(""); setSelectedDay("1"); setAssignOpen(true); }}
+          onAdd={() => {
+            if (filterClient) {
+              const dateStr = format(currentDate, "yyyy-MM-dd");
+              const existing = workouts?.find((w: any) => w.workout_date === dateStr);
+              if (existing) { setDetailWorkout(existing); }
+              else { quickAddWorkout.mutate(currentDate); }
+            } else {
+              setSelectedDate(currentDate);
+              setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1");
+              setAssignOpen(true);
+            }
+          }}
           onDelete={(id) => deleteWorkout.mutate(id)}
           onEdit={(w) => { setEditingWorkout(w); setEditWorkoutRoutine(w.routine_id || ""); setEditWorkoutDay(String(w.day_number ?? 1)); setEditWorkoutOpen(true); }}
           onViewDetail={(w) => setDetailWorkout(w)}
@@ -837,9 +869,15 @@ export default function CalendarPage() {
                   } ${!isCurrentMonth ? "opacity-40" : ""}`}
                   onClick={() => {
                     if (role === "coach") {
-                      setSelectedDate(day);
-                      setSelectedClient(filterClient || ""); setSelectedRoutine(""); setSelectedDay("1");
-                      setAssignOpen(true);
+                      if (filterClient) {
+                        const existing = workouts?.find((w: any) => w.workout_date === dateStr);
+                        if (existing) { setDetailWorkout(existing); }
+                        else { quickAddWorkout.mutate(day); }
+                      } else {
+                        setSelectedDate(day);
+                        setSelectedClient(""); setSelectedRoutine(""); setSelectedDay("1");
+                        setAssignOpen(true);
+                      }
                     }
                   }}
                 >
