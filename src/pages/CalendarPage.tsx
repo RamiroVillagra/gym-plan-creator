@@ -439,7 +439,13 @@ export default function CalendarPage() {
   const quickAddWorkout = useMutation({
     mutationFn: async (date: Date) => {
       const dateStr = format(date, "yyyy-MM-dd");
-      const existing = workouts?.find((w: any) => w.workout_date === dateStr);
+      // Consulta directa a la DB (no el cache) para evitar duplicados por race condition
+      const { data: existing } = await supabase
+        .from("assigned_workouts")
+        .select("*, clients(name), routines(name, total_days)")
+        .eq("client_id", filterClient)
+        .eq("workout_date", dateStr)
+        .maybeSingle();
       if (existing) return existing;
       const { data, error } = await supabase
         .from("assigned_workouts")
