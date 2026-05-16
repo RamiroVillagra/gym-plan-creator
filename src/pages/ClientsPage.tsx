@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info } from "lucide-react";
 import { toast } from "sonner";
 import { format, addDays, addWeeks, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -40,6 +40,24 @@ export default function ClientsPage() {
   const [newRoutineName, setNewRoutineName] = useState("");
   const [newRoutineDesc, setNewRoutineDesc] = useState("");
   const [newRoutineDays, setNewRoutineDays] = useState("1");
+
+  // Info dialog
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoClient, setInfoClient] = useState<any>(null);
+  const [infoText, setInfoText] = useState("");
+
+  const updateInfo = useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
+      const { error } = await supabase.from("clients").update({ notes: notes || null }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      setInfoOpen(false);
+      toast.success("Información guardada");
+    },
+    onError: () => toast.error("Error al guardar"),
+  });
 
   // View routine detail
   const [viewRoutineId, setViewRoutineId] = useState<string | null>(null);
@@ -522,17 +540,63 @@ export default function ClientsPage() {
               onClick={() => setSelectedClient(client)}
               className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors w-full text-left"
             >
-              <div>
-                <p className="font-medium text-foreground">{client.name}</p>
-                <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                  {client.email && <span>{client.email}</span>}
-                  {client.phone && <span>{client.phone}</span>}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground">{client.name}</p>
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    {client.email && <span>{client.email}</span>}
+                    {client.phone && <span>{client.phone}</span>}
+                  </div>
                 </div>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setInfoClient(client);
+                    setInfoText((client as any).notes || "");
+                    setInfoOpen(true);
+                  }}
+                  title="Información importante"
+                  className={`shrink-0 p-1.5 rounded-full transition-colors ${
+                    (client as any).notes
+                      ? "text-primary bg-primary/10 hover:bg-primary/20"
+                      : "text-muted-foreground/30 hover:text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
               </div>
               <span className="text-xs text-muted-foreground">→</span>
             </button>
           ))}
         </div>
+
+        {/* Info dialog */}
+        <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Info className="h-4 w-4 text-primary" />
+                {infoClient?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <textarea
+                className="w-full min-h-[140px] rounded-lg border border-input bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Ej: lesión de rodilla, no puede hacer sentadillas. Objetivo: bajar 5kg. Toma medicación..."
+                value={infoText}
+                onChange={e => setInfoText(e.target.value)}
+                autoFocus
+              />
+              <Button
+                className="w-full"
+                onClick={() => updateInfo.mutate({ id: infoClient.id, notes: infoText })}
+                disabled={updateInfo.isPending}
+              >
+                {updateInfo.isPending ? "Guardando..." : "Guardar"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

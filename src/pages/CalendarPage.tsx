@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2, Zap, Battery } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2, Zap, Battery, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -794,6 +794,18 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+
+      {/* Client info banner */}
+      {filterClient && (() => {
+        const client = clients?.find(c => c.id === filterClient);
+        if (!(client as any)?.notes) return null;
+        return (
+          <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2.5 mb-4">
+            <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-foreground whitespace-pre-wrap">{(client as any).notes}</p>
+          </div>
+        );
+      })()}
 
       {/* Calendar grid */}
       {viewMode === "day" ? (
