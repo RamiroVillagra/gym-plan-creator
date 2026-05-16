@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play } from "lucide-react";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play, RefreshCw } from "lucide-react";
 import { format, addWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -81,6 +81,44 @@ export default function KioskPage() {
       return next;
     });
   };
+  const [showWorkoutPicker, setShowWorkoutPicker] = useState(false);
+
+  useEffect(() => { setShowWorkoutPicker(false); }, [selectedClient]);
+
+  const { data: clientAllWorkouts } = useQuery({
+    queryKey: ["kiosk-client-all-workouts", selectedClient],
+    enabled: !!selectedClient && (showWorkoutPicker || todayWorkouts?.length === 0),
+    queryFn: async () => {
+      const from = format(addWeeks(new Date(), -8), "yyyy-MM-dd");
+      const to = format(addWeeks(new Date(), 8), "yyyy-MM-dd");
+      const { data, error } = await supabase
+        .from("assigned_workouts")
+        .select("*, routines(id, name, total_days)")
+        .eq("client_id", selectedClient!)
+        .gte("workout_date", from)
+        .lte("workout_date", to)
+        .order("workout_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const deleteWorkoutToday = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("assigned_workouts")
+        .delete()
+        .eq("client_id", selectedClient!)
+        .eq("workout_date", today);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", selectedClient, today] });
+      queryClient.invalidateQueries({ queryKey: ["kiosk-client-all-workouts", selectedClient] });
+      setShowWorkoutPicker(true);
+    },
+    onError: () => toast.error("Error al eliminar"),
+  });
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [managingOpen, setManagingOpen] = useState(false);
@@ -521,14 +559,83 @@ export default function KioskPage() {
           <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
         </div>
  
-        {!todayWorkouts?.length ? (
-          <div className="text-center py-12 text-muted-foreground">
-            <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p>No hay entrenamiento asignado para hoy.</p>
+        {/* Picker de entrenamiento (estado vacío o cambio manual) */}
+        {(showWorkoutPicker || (todayWorkouts !== undefined && todayWorkouts.length === 0)) && !deleteWorkoutToday.isPending ? (
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-sm font-semibold text-foreground mb-1">
+              ¿Qué entrenamiento hace <span className="text-primary">{selectedClientName}</span> hoy?
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">Elegí cualquier día planificado.</p>
+            {!clientAllWorkouts ? (
+              <p className="text-xs text-muted-foreground text-center py-4">Cargando...</p>
+            ) : clientAllWorkouts.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No hay entrenamientos planificados.</p>
+            ) : (() => {
+              const todayW = clientAllWorkouts.filter((w: any) => w.workout_date === today);
+              const upcoming = clientAllWorkouts.filter((w: any) => w.workout_date > today);
+              const past = clientAllWorkouts.filter((w: any) => w.workout_date < today);
+              const renderItem = (w: any, isToday = false) => {
+                const dateObj = new Date(w.workout_date + "T12:00:00");
+                const isPast = w.workout_date < today;
+                return (
+                  <button
+                    key={w.id}
+                    disabled={assignWorkoutToday.isPending}
+                    onClick={async () => {
+                      try {
+                        if (w.workout_date === today) {
+                          queryClient.invalidateQueries({ queryKey: ["kiosk-workouts", selectedClient, today] });
+                          setShowWorkoutPicker(false);
+                        } else {
+                          await assignWorkoutToday.mutateAsync({
+                            clientId: selectedClient!,
+                            routineId: (w as any).routines?.id ?? null,
+                            dayNumber: (w as any).day_number ?? 1,
+                            sourceWorkoutId: w.id,
+                          });
+                          setShowWorkoutPicker(false);
+                        }
+                      } catch { toast.error("Error al asignar"); }
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all text-left group mb-1
+                      ${isToday ? "border-primary bg-primary/5 hover:bg-primary/10" : "border-border hover:bg-primary/10 hover:border-primary/40"}`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                        {(w as any).routines?.name ?? "Entrenamiento libre"}
+                        {((w as any).routines?.total_days ?? 1) > 1 && (
+                          <span className="text-xs text-muted-foreground ml-1">— Día {(w as any).day_number ?? 1}</span>
+                        )}
+                      </p>
+                      <p className={`text-xs mt-0.5 ${isToday ? "text-primary font-medium" : isPast ? "text-muted-foreground" : "text-primary/70"}`}>
+                        {isToday ? "Hoy" : format(dateObj, "EEEE d 'de' MMMM", { locale: es })}
+                      </p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${isToday ? "bg-primary text-primary-foreground" : isPast ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary"}`}>
+                      {isToday ? "hoy" : isPast ? "pasado" : "próximo"}
+                    </span>
+                  </button>
+                );
+              };
+              return (
+                <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                  {todayW.length > 0 && <>{<p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1">Hoy</p>}{todayW.map((w: any) => renderItem(w, true))}</>}
+                  {upcoming.length > 0 && <>{<p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1 pt-2">Próximos</p>}{upcoming.map((w: any) => renderItem(w))}</>}
+                  {past.length > 0 && <>{<p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 pb-1 pt-2">Anteriores</p>}{past.map((w: any) => renderItem(w))}</>}
+                </div>
+              );
+            })()}
+            {showWorkoutPicker && (
+              <button
+                onClick={() => setShowWorkoutPicker(false)}
+                className="mt-3 w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Cancelar
+              </button>
+            )}
           </div>
-        ) : (
+        ) : todayWorkouts?.length ? (
           todayWorkouts.map((workout: any) => {
-            // Prioridad: ejercicios propios (modificados), si no hay fallback a rutina base
             const dayNum = workout.day_number ?? 1;
             const workoutAssigned = (assignedExercises ?? [])
               .filter((e: any) => e.assigned_workout_id === workout.id);
@@ -538,14 +645,25 @@ export default function KioskPage() {
             const blocks = [...new Set(exercises.map((re: any) => re.block_number ?? 1))].sort((a: number, b: number) => a - b);
             return (
               <div key={workout.id} className="space-y-4 mb-6">
-                {workout.routines?.name && (
-                  <h2 className="text-xl font-heading font-bold text-primary">
-                    {workout.routines.name}
-                    {(workout.routines?.total_days ?? 1) > 1 && (
-                      <span className="text-sm font-normal text-muted-foreground ml-2">— Día {workout.day_number ?? 1}</span>
-                    )}
-                  </h2>
-                )}
+                <div className="flex items-center justify-between">
+                  {workout.routines?.name ? (
+                    <h2 className="text-xl font-heading font-bold text-primary">
+                      {workout.routines.name}
+                      {(workout.routines?.total_days ?? 1) > 1 && (
+                        <span className="text-sm font-normal text-muted-foreground ml-2">— Día {workout.day_number ?? 1}</span>
+                      )}
+                    </h2>
+                  ) : <span />}
+                  <button
+                    onClick={() => deleteWorkoutToday.mutate()}
+                    disabled={deleteWorkoutToday.isPending}
+                    title="Cambiar entrenamiento"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-lg hover:bg-destructive/10"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Cambiar día
+                  </button>
+                </div>
                 {blocks.map((blockNum: number) => {
                   const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);
                   return (
@@ -603,7 +721,7 @@ export default function KioskPage() {
               </div>
             );
           })
-        )}
+        ) : null}
       </div>
     );
   }
