@@ -294,7 +294,7 @@ export default function BlocksPage() {
                           onChange={e => setBlockExs(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))}
                         />
                         <div className="flex rounded-md border border-input overflow-hidden h-7">
-                          {["kg", "seg", "m"].map(u => (
+                          {["kg", "seg", "m", "cm"].map(u => (
                             <button
                               key={u}
                               type="button"

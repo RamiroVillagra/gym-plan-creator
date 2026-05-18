@@ -667,7 +667,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               <span className="text-xs text-muted-foreground">@</span>
                               <Input type="number" className="w-16 h-7 text-xs" value={editWeight} onChange={e => setEditWeight(e.target.value)} placeholder="0" />
                               <div className="flex rounded-md border border-input overflow-hidden h-7">
-                                {["kg", "seg", "m"].map(u => (
+                                {["kg", "seg", "m", "cm"].map(u => (
                                   <button key={u} type="button" onClick={() => setEditUnit(u)}
                                     className={`px-2 text-xs font-medium transition-colors ${editUnit === u ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-secondary"}`}>
                                     {u}
