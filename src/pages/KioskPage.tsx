@@ -393,18 +393,32 @@ export default function KioskPage() {
         if (logError) throw logError;
       }
 
-      // 2. Sobreescribir assigned_workout_exercises con valores reales (batch upsert)
-      const exerciseRows = Object.values(byExercise).map(({ assignedWorkoutId, exerciseId, sets: exerciseSets }) => ({
-        assigned_workout_id: assignedWorkoutId,
-        exercise_id: exerciseId,
-        sets: exerciseSets.length,
-        reps: exerciseSets[0]?.reps_done ?? 0,
-        weight: exerciseSets[0]?.weight_used ?? 0,
-      }));
-      if (exerciseRows.length) {
-        const { error: exError } = await supabase.from("assigned_workout_exercises")
-          .upsert(exerciseRows, { onConflict: "assigned_workout_id,exercise_id" });
-        if (exError) throw exError;
+      // 2. Sobreescribir assigned_workout_exercises con valores reales
+      for (const { assignedWorkoutId, exerciseId, sets: exerciseSets } of Object.values(byExercise)) {
+        const totalSets = exerciseSets.length;
+        const reps = exerciseSets[0]?.reps_done ?? 0;
+        const weight = exerciseSets[0]?.weight_used ?? 0;
+
+        const { data: existing } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId)
+          .eq("exercise_id", exerciseId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase.from("assigned_workout_exercises")
+            .update({ sets: totalSets, reps, weight })
+            .eq("id", existing.id);
+        } else {
+          await supabase.from("assigned_workout_exercises").insert({
+            assigned_workout_id: assignedWorkoutId,
+            exercise_id: exerciseId,
+            sets: totalSets,
+            reps,
+            weight,
+          });
+        }
       }
     },
     onSuccess: () => {
