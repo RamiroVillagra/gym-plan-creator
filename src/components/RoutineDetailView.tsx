@@ -703,14 +703,14 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 </>
                               )}
                             </div>
-                            <Input
-                              className="h-7 text-xs mt-1"
-                              placeholder="Comentario para el alumno (opcional)"
-                              value={editNotes}
-                              onChange={e => setEditNotes(e.target.value)}
-                            />
-                            <div className="flex gap-1 mt-1">
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateExercise.mutate({
+                            <div className="flex items-center gap-1 mt-1">
+                              <Input
+                                className="h-7 text-xs flex-1"
+                                placeholder="Comentario (opcional)"
+                                value={editNotes}
+                                onChange={e => setEditNotes(e.target.value)}
+                              />
+                              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => updateExercise.mutate({
                                 id: re.id,
                                 sets: parseInt(editSets) || 1,
                                 reps: parseInt(editReps) || 1,
@@ -721,7 +721,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingId(null)}>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setEditingId(null)}>
                                 <span className="text-xs text-muted-foreground">✕</span>
                               </Button>
                             </div>
