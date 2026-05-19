@@ -436,6 +436,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
                 weight={re.weight}
                 unit={re.unit ?? "kg"}
                 setGroups={re.set_groups}
+                coachNotes={re.notes ?? null}
                 exerciseId={re.exercise_id}
                 existingLogs={existingLogs?.filter((l: any) => l.exercise_id === re.exercise_id) ?? []}
                 prevLogs={(prevLogs ?? []).filter((l: any) => l.exercise_id === re.exercise_id)}
@@ -509,10 +510,11 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const ExerciseCard = forwardRef(function ExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", setGroups, exerciseId, existingLogs, prevLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet,
 }: {
   exercise: any; sets: number; reps: number; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
+  coachNotes?: string | null;
   exerciseId: string; existingLogs: any[]; prevLogs: any[];
   onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => void;
 }, ref: any) {
@@ -556,6 +558,9 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           </div>
           {exercise?.muscle_group && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
+          )}
+          {coachNotes && (
+            <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
           )}
         </div>
         <div className="flex items-center gap-2">

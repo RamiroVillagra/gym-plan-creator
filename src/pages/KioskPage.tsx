@@ -1,4 +1,4 @@
-import { useState, useRef, forwardRef, useImperativeHandle, useEffect } from "react";
+import { useState, useRef, forwardRef, useImperativeHandle, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -95,6 +95,7 @@ export default function KioskPage() {
  
   const { data: kioskGroups } = useQuery({
     queryKey: ["kiosk-groups"],
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.from("kiosk_groups").select("*").order("name");
       if (error) throw error;
@@ -104,6 +105,7 @@ export default function KioskPage() {
  
   const { data: allClients } = useQuery({
     queryKey: ["clients"],
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.from("clients").select("id, name").order("name");
       if (error) throw error;
@@ -132,13 +134,7 @@ export default function KioskPage() {
 
   const assignWorkoutToday = useMutation({
     mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string | null; dayNumber: number; sourceWorkoutId: string }) => {
-      // Borrar cualquier workout existente para hoy (evita duplicados)
-      await supabase.from("assigned_workouts")
-        .delete()
-        .eq("client_id", clientId)
-        .eq("workout_date", today);
-
-      // Crear el workout de hoy con el day_number correcto
+      // Crear el workout de hoy primero (si falla, no se borra el anterior)
       const { data: newWorkout, error } = await supabase.from("assigned_workouts").insert({
         client_id: clientId,
         routine_id: routineId,
@@ -147,13 +143,20 @@ export default function KioskPage() {
       }).select().single();
       if (error) throw error;
 
+      // Borrar el workout anterior solo después de insertar el nuevo exitosamente
+      await supabase.from("assigned_workouts")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("workout_date", today)
+        .neq("id", newWorkout.id);
+
       // Primero intentar copiar ejercicios modificados del día fuente
       const { data: sourceExercises } = await supabase
         .from("assigned_workout_exercises")
         .select("*")
         .eq("assigned_workout_id", sourceWorkoutId);
 
-      if (sourceExercises?.length && newWorkout) {
+      if (sourceExercises?.length) {
         // Tiene ejercicios modificados → copiar esos
         const copies = sourceExercises.map((ex: any) => ({
           assigned_workout_id: newWorkout.id,
@@ -168,8 +171,9 @@ export default function KioskPage() {
           rest_seconds: ex.rest_seconds,
           set_groups: ex.set_groups ?? null,
         }));
-        await supabase.from("assigned_workout_exercises").insert(copies);
-      } else if (newWorkout) {
+        const { error: copyError } = await supabase.from("assigned_workout_exercises").insert(copies);
+        if (copyError) throw copyError;
+      } else {
         // No tiene modificaciones → copiar desde la rutina base filtrando por el día correcto
         const { data: baseExercises } = await supabase
           .from("routine_exercises")
@@ -190,7 +194,8 @@ export default function KioskPage() {
             rest_seconds: ex.rest_seconds,
             set_groups: ex.set_groups ?? null,
           }));
-          await supabase.from("assigned_workout_exercises").insert(copies);
+          const { error: baseError } = await supabase.from("assigned_workout_exercises").insert(copies);
+          if (baseError) throw baseError;
         }
       }
     },
@@ -204,6 +209,7 @@ export default function KioskPage() {
   const { data: groupMembers } = useQuery({
     queryKey: ["kiosk-members", selectedGroup],
     enabled: !!selectedGroup,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kiosk_group_members")
@@ -217,6 +223,7 @@ export default function KioskPage() {
   const { data: managingGroupMembers } = useQuery({
     queryKey: ["kiosk-managing-members", managingGroupId],
     enabled: !!managingGroupId,
+    staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("kiosk_group_members")
@@ -227,7 +234,7 @@ export default function KioskPage() {
     },
   });
  
-  const { data: todayWorkouts } = useQuery({
+  const { data: todayWorkouts, isLoading: workoutsLoading } = useQuery({
     queryKey: ["kiosk-workouts", selectedClient, today],
     enabled: !!selectedClient,
     staleTime: 60_000,
@@ -242,11 +249,13 @@ export default function KioskPage() {
     },
   });
  
+  const workoutIds = useMemo(() => todayWorkouts?.map((w: any) => w.id) ?? [], [todayWorkouts]);
+
   const { data: assignedExercises } = useQuery({
-    queryKey: ["kiosk-assigned-exercises", todayWorkouts?.map((w: any) => w.id)],
-    enabled: !!todayWorkouts?.length,
+    queryKey: ["kiosk-assigned-exercises", workoutIds],
+    enabled: workoutIds.length > 0,
     queryFn: async () => {
-      const ids = todayWorkouts!.map((w: any) => w.id);
+      const ids = workoutIds;
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
         .select("*, exercises(name, muscle_group, video_url)")
@@ -259,10 +268,10 @@ export default function KioskPage() {
   });
 
   const { data: existingLogs } = useQuery({
-    queryKey: ["kiosk-logs", todayWorkouts?.map((w: any) => w.id)],
-    enabled: !!todayWorkouts?.length,
+    queryKey: ["kiosk-logs", workoutIds],
+    enabled: workoutIds.length > 0,
     queryFn: async () => {
-      const ids = todayWorkouts!.map((w: any) => w.id);
+      const ids = workoutIds;
       const { data, error } = await supabase
         .from("workout_logs")
         .select("*")
@@ -384,32 +393,18 @@ export default function KioskPage() {
         if (logError) throw logError;
       }
 
-      // 2. Sobreescribir assigned_workout_exercises con valores reales
-      for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
-        const totalSets = sets.length;
-        const reps = sets[0]?.reps_done ?? 0;
-        const weight = sets[0]?.weight_used ?? 0;
-
-        const { data: existing } = await supabase
-          .from("assigned_workout_exercises")
-          .select("id")
-          .eq("assigned_workout_id", assignedWorkoutId)
-          .eq("exercise_id", exerciseId)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase.from("assigned_workout_exercises")
-            .update({ sets: totalSets, reps, weight })
-            .eq("id", existing.id);
-        } else {
-          await supabase.from("assigned_workout_exercises").insert({
-            assigned_workout_id: assignedWorkoutId,
-            exercise_id: exerciseId,
-            sets: totalSets,
-            reps,
-            weight,
-          });
-        }
+      // 2. Sobreescribir assigned_workout_exercises con valores reales (batch upsert)
+      const exerciseRows = Object.values(byExercise).map(({ assignedWorkoutId, exerciseId, sets: exerciseSets }) => ({
+        assigned_workout_id: assignedWorkoutId,
+        exercise_id: exerciseId,
+        sets: exerciseSets.length,
+        reps: exerciseSets[0]?.reps_done ?? 0,
+        weight: exerciseSets[0]?.weight_used ?? 0,
+      }));
+      if (exerciseRows.length) {
+        const { error: exError } = await supabase.from("assigned_workout_exercises")
+          .upsert(exerciseRows, { onConflict: "assigned_workout_id,exercise_id" });
+        if (exError) throw exError;
       }
     },
     onSuccess: () => {
@@ -420,15 +415,16 @@ export default function KioskPage() {
     onError: () => toast.error("Error al guardar la sesión"),
   });
  
-  const groupClientIds = groupMembers?.map((m: any) => m.clients.id) ?? [];
-  const allKioskClients = [
+  const groupClientIds = useMemo(() => groupMembers?.map((m: any) => m.clients.id) ?? [], [groupMembers]);
+  const allKioskClients = useMemo(() => [
     ...(groupMembers?.map((m: any) => ({ id: m.clients.id, name: m.clients.name })) ?? []),
     ...manualClients.filter(c => !groupClientIds.includes(c.id)),
-  ];
+  ], [groupMembers, manualClients, groupClientIds]);
  
   const filteredSearch = allClients?.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) &&
-    !manualClients.some(k => k.id === c.id)
+    !manualClients.some(k => k.id === c.id) &&
+    !groupClientIds.includes(c.id)
   ) ?? [];
  
   const managingMemberIds = managingGroupMembers?.map((m: any) => m.client_id) ?? [];
@@ -539,7 +535,12 @@ export default function KioskPage() {
           <h1 className="text-2xl font-heading font-bold">{selectedClientName}</h1>
         </div>
  
-        {!todayWorkouts?.length ? (
+        {workoutsLoading ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Dumbbell className="h-10 w-10 mx-auto mb-3 opacity-30 animate-pulse" />
+            <p className="text-sm">Cargando entrenamiento...</p>
+          </div>
+        ) : !todayWorkouts?.length ? (
           <div className="text-center py-12 text-muted-foreground">
             <Dumbbell className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p className="mb-4">No hay entrenamiento asignado para hoy.</p>
@@ -614,6 +615,7 @@ export default function KioskPage() {
                             weight={re.weight}
                             unit={re.unit ?? "kg"}
                             setGroups={re.set_groups}
+                            coachNotes={re.notes ?? null}
                             assignedWorkoutId={workout.id}
                             exerciseId={re.exercise_id}
                             existingLogs={existingLogs?.filter(
@@ -1027,10 +1029,11 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const KioskExerciseCard = forwardRef(function KioskExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", setGroups, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
 }: {
   exercise: any; sets: number | null; reps: number | null; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
+  coachNotes?: string | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
 }, ref: any) {
@@ -1077,6 +1080,9 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         ) : (
           sets ? <p className="text-xs text-muted-foreground">{sets}×{reps ?? "?"}{weight ? ` @ ${weight}${unit}` : ""}</p> : null
         )}
+        {coachNotes && (
+          <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
+        )}
       </div>
       <div className="space-y-2">
         {/* Encabezados de columna */}
@@ -1091,9 +1097,9 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
               <Input type="number" placeholder="Reps" className="w-20 h-8 text-sm" value={s.reps}
-                onChange={e => { const n = [...localSets]; n[i].reps = e.target.value; setLocalSets(n); }} />
+                onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, reps: val } : s2)); }} />
               <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
-                onChange={e => { const n = [...localSets]; n[i].weight = e.target.value; setLocalSets(n); }} />
+                onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, weight: val } : s2)); }} />
               <button onClick={() => onLogSet({
                 assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId,
                 set_number: i + 1, reps_done: parseInt(s.reps) || 0, weight_used: parseFloat(s.weight) || 0,

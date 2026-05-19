@@ -47,6 +47,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editWeight, setEditWeight] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
   const [editDistance, setEditDistance] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   // Historial por ejercicio
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
@@ -306,7 +307,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateExercise = useMutation({
-    mutationFn: async ({ id, sets, reps, weight, unit, distance }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null }) => {
+    mutationFn: async ({ id, sets, reps, weight, unit, distance, notes }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null; notes: string | null }) => {
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
@@ -322,10 +323,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             .eq("order_index", original.order_index)
             .single();
           if (cloned) {
-            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance };
+            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance, notes: (cloned as any).notes };
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ sets, reps, weight, unit, distance })
+              .update({ sets, reps, weight, unit, distance, notes: notes || null })
               .eq("id", cloned.id);
             if (error) throw error;
             return { id: cloned.id, prev, table };
@@ -336,8 +337,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         return null;
       }
       // Capture prev values before update
-      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance").eq("id", id).single();
-      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance }).eq("id", id);
+      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance, notes").eq("id", id).single();
+      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance, notes: notes || null }).eq("id", id);
       if (error) throw error;
       return { id, prev: current, table };
     },
@@ -682,6 +683,14 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   <span className="text-xs text-muted-foreground">{editUnit}</span>
                                 </>
                               )}
+                            </div>
+                            <Input
+                              className="h-7 text-xs mt-1"
+                              placeholder="Comentario para el alumno (opcional)"
+                              value={editNotes}
+                              onChange={e => setEditNotes(e.target.value)}
+                            />
+                            <div className="flex gap-1 mt-1">
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateExercise.mutate({
                                 id: re.id,
                                 sets: parseInt(editSets) || 1,
@@ -689,6 +698,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 weight: editWeight ? parseFloat(editWeight) : null,
                                 unit: editUnit,
                                 distance: (editUnit === "m" || editUnit === "cm") && editDistance ? parseFloat(editDistance) : null,
+                                notes: editNotes || null,
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
                               </Button>
@@ -709,6 +719,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditWeight(re.weight != null ? String(re.weight) : "");
                                 setEditUnit(re.unit ?? "kg");
                                 setEditDistance(re.distance != null ? String(re.distance) : "");
+                                setEditNotes(re.notes ?? "");
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
@@ -722,6 +733,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 <p className="text-[10px] text-muted-foreground">
                                   {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                 </p>
+                              )}
+                              {re.notes && (
+                                <p className="text-[10px] text-amber-500 mt-0.5 italic">💬 {re.notes}</p>
                               )}
                               {maxWeights[re.exercise_id] !== undefined && (
                                 <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 mt-0.5">
