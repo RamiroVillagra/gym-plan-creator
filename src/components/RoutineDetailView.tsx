@@ -352,6 +352,25 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     },
   });
 
+  const moveExercise = useMutation({
+    mutationFn: async ({ idA, idB, orderA, orderB }: { idA: string; idB: string; orderA: number; orderB: number }) => {
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return;
+      }
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      // Swap usando valor temporal para evitar conflictos
+      const tempOrder = -1;
+      await supabase.from(table).update({ order_index: tempOrder }).eq("id", idA);
+      await supabase.from(table).update({ order_index: orderA }).eq("id", idB);
+      await supabase.from(table).update({ order_index: orderB }).eq("id", idA);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: invalidateKey }),
+    onError: () => toast.error("Error al mover el ejercicio"),
+  });
+
   const moveBlock = useMutation({
     mutationFn: async ({ blockA, blockB }: { blockA: number; blockB: number }) => {
       if (isOverrideMode && !hasOverrides) {
@@ -653,7 +672,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                 )}
               </div>
               <div className="space-y-1">
-                {blockExercises.map((re: any) => {
+                {blockExercises.map((re: any, exIdx: number) => {
                   const isEditing = editingId === re.id;
                   const showHistory = historyExerciseId === re.exercise_id;
                   return (
@@ -772,6 +791,28 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               )}
                               {editable && (
                                 <>
+                                <Button
+                                  variant="ghost" size="icon" className="h-6 w-6"
+                                  disabled={exIdx === 0}
+                                  title="Subir ejercicio"
+                                  onClick={() => {
+                                    const prev = blockExercises[exIdx - 1];
+                                    moveExercise.mutate({ idA: re.id, idB: prev.id, orderA: re.order_index, orderB: prev.order_index });
+                                  }}
+                                >
+                                  <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                                </Button>
+                                <Button
+                                  variant="ghost" size="icon" className="h-6 w-6"
+                                  disabled={exIdx === blockExercises.length - 1}
+                                  title="Bajar ejercicio"
+                                  onClick={() => {
+                                    const next = blockExercises[exIdx + 1];
+                                    moveExercise.mutate({ idA: re.id, idB: next.id, orderA: re.order_index, orderB: next.order_index });
+                                  }}
+                                >
+                                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                </Button>
                                 <Button
                                   variant="ghost" size="icon" className="h-6 w-6"
                                   title="Series progresivas"
