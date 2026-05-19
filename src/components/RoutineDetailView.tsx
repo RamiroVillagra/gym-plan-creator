@@ -750,7 +750,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 ))
                               ) : (
                                 <p className="text-[10px] text-muted-foreground">
-                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
+                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}${re.unit ?? "kg"}` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                 </p>
                               )}
                               {re.notes && (
