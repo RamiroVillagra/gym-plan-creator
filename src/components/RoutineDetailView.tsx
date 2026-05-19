@@ -46,6 +46,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editReps, setEditReps] = useState("");
   const [editWeight, setEditWeight] = useState("");
   const [editUnit, setEditUnit] = useState("kg");
+  const [editDistance, setEditDistance] = useState("");
 
   // Historial por ejercicio
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
@@ -305,7 +306,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateExercise = useMutation({
-    mutationFn: async ({ id, sets, reps, weight, unit }: { id: string; sets: number; reps: number; weight: number | null; unit: string }) => {
+    mutationFn: async ({ id, sets, reps, weight, unit, distance }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null }) => {
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
@@ -313,7 +314,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         if (original) {
           const { data: cloned } = await supabase
             .from("assigned_workout_exercises")
-            .select("id, sets, reps, weight, unit")
+            .select("id, sets, reps, weight, unit, distance")
             .eq("assigned_workout_id", assignedWorkoutId!)
             .eq("exercise_id", original.exercise_id)
             .eq("day_number", original.day_number)
@@ -321,10 +322,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             .eq("order_index", original.order_index)
             .single();
           if (cloned) {
-            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit };
+            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance };
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ sets, reps, weight, unit })
+              .update({ sets, reps, weight, unit, distance })
               .eq("id", cloned.id);
             if (error) throw error;
             return { id: cloned.id, prev, table };
@@ -335,8 +336,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         return null;
       }
       // Capture prev values before update
-      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit").eq("id", id).single();
-      const { error } = await supabase.from(table).update({ sets, reps, weight, unit }).eq("id", id);
+      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance").eq("id", id).single();
+      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance }).eq("id", id);
       if (error) throw error;
       return { id, prev: current, table };
     },
@@ -674,12 +675,20 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   </button>
                                 ))}
                               </div>
+                              {(editUnit === "m" || editUnit === "cm") && (
+                                <>
+                                  <span className="text-xs text-muted-foreground">×</span>
+                                  <Input type="number" className="w-16 h-7 text-xs" value={editDistance} onChange={e => setEditDistance(e.target.value)} placeholder={editUnit} />
+                                  <span className="text-xs text-muted-foreground">{editUnit}</span>
+                                </>
+                              )}
                               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateExercise.mutate({
                                 id: re.id,
                                 sets: parseInt(editSets) || 1,
                                 reps: parseInt(editReps) || 1,
                                 weight: editWeight ? parseFloat(editWeight) : null,
                                 unit: editUnit,
+                                distance: (editUnit === "m" || editUnit === "cm") && editDistance ? parseFloat(editDistance) : null,
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
                               </Button>
@@ -699,18 +708,19 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditReps(String(re.reps));
                                 setEditWeight(re.weight != null ? String(re.weight) : "");
                                 setEditUnit(re.unit ?? "kg");
+                                setEditDistance(re.distance != null ? String(re.distance) : "");
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
                               {re.set_groups?.length ? (
                                 re.set_groups.map((g: any, i: number) => (
                                   <p key={i} className="text-[10px] text-muted-foreground">
-                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${re.unit ?? "kg"}` : ""}
+                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${re.unit ?? "kg"}` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                   </p>
                                 ))
                               ) : (
                                 <p className="text-[10px] text-muted-foreground">
-                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}${re.unit ?? "kg"}` : ""}
+                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                 </p>
                               )}
                               {maxWeights[re.exercise_id] !== undefined && (

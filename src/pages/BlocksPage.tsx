@@ -14,6 +14,7 @@ interface BlockExercise {
   reps: string;
   weight: string;
   unit: string;
+  distance: string;
 }
 
 export default function BlocksPage() {
@@ -73,6 +74,7 @@ export default function BlocksPage() {
           reps: String(be.reps ?? ""),
           weight: be.weight != null ? String(be.weight) : "",
           unit: be.unit ?? "kg",
+          distance: be.distance != null ? String(be.distance) : "",
         }))
     );
     setExSearch("");
@@ -97,6 +99,7 @@ export default function BlocksPage() {
             reps: parseInt(e.reps) || null,
             weight: parseFloat(e.weight) || null,
             unit: e.unit,
+            distance: parseFloat(e.distance) || null,
             order_index: i,
           }));
           const { error: ie } = await supabase.from("workout_block_exercises").insert(rows);
@@ -151,6 +154,7 @@ export default function BlocksPage() {
       reps: "10",
       weight: "",
       unit: "kg",
+      distance: "",
     }]);
     setExSearch("");
   };
@@ -309,6 +313,19 @@ export default function BlocksPage() {
                             </button>
                           ))}
                         </div>
+                        {(ex.unit === "m" || ex.unit === "cm") && (
+                          <>
+                            <span className="text-xs text-muted-foreground">×</span>
+                            <Input
+                              type="number"
+                              className="w-16 h-7 text-xs"
+                              placeholder={ex.unit}
+                              value={ex.distance}
+                              onChange={e => setBlockExs(prev => prev.map((x, j) => j === i ? { ...x, distance: e.target.value } : x))}
+                            />
+                            <span className="text-xs text-muted-foreground">{ex.unit}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
