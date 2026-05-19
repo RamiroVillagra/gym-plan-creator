@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Pencil, X, Search, Layers } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Search, Layers, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -269,9 +269,35 @@ export default function BlocksPage() {
                     <div key={i} className="bg-secondary/40 rounded-lg px-3 py-2">
                       <div className="flex items-center justify-between mb-1.5">
                         <span className="text-xs font-medium text-foreground">{ex.exercise_name}</span>
-                        <button onClick={() => setBlockExs(prev => prev.filter((_, j) => j !== i))}>
-                          <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive transition-colors" />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={i === 0}
+                            onClick={() => setBlockExs(prev => {
+                              const next = [...prev];
+                              [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                              return next;
+                            })}
+                            className="p-0.5 rounded hover:bg-secondary disabled:opacity-20 transition-colors"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={i === blockExs.length - 1}
+                            onClick={() => setBlockExs(prev => {
+                              const next = [...prev];
+                              [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                              return next;
+                            })}
+                            className="p-0.5 rounded hover:bg-secondary disabled:opacity-20 transition-colors"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button onClick={() => setBlockExs(prev => prev.filter((_, j) => j !== i))}>
+                            <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive transition-colors ml-1" />
+                          </button>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <Input
