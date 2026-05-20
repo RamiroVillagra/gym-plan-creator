@@ -8,6 +8,7 @@ import { format, addWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import VideoModal from "@/components/VideoModal";
  
 const MANUAL_CLIENTS_KEY = "kiosk_manual_clients";
 const RECENT_CLIENTS_KEY = "kiosk_recent_clients";
@@ -1051,6 +1052,7 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
 }, ref: any) {
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   // Expandir set_groups en filas individuales de series
   const allSets = setGroups?.length
     ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
@@ -1082,10 +1084,11 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         <div className="flex items-center gap-2">
           <p className="font-heading font-bold text-foreground">{exercise?.name}</p>
           {(exercise as any)?.video_url && (
-            <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
+            <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio">
               <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
-            </a>
+            </button>
           )}
+          <VideoModal url={videoUrl} onClose={() => setVideoUrl(null)} />
         </div>
         {setGroups?.length ? (
           setGroups.map((g, i) => (

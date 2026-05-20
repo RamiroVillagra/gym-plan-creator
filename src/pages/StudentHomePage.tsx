@@ -12,6 +12,7 @@ import {
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Dumbbell, CheckCircle2, Circle, History, ArrowLeft, Play } from "lucide-react";
 import { toast } from "sonner";
+import VideoModal from "@/components/VideoModal";
 
 type ViewMode = "week" | "month";
 
@@ -519,6 +520,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => void;
 }, ref: any) {
   const [showPrev, setShowPrev] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const allSets = setGroups?.length
     ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
@@ -551,10 +553,11 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           <div className="flex items-center gap-2">
             <p className="text-lg font-heading font-bold text-foreground">{exercise?.name}</p>
             {(exercise as any)?.video_url && (
-              <a href={(exercise as any).video_url} target="_blank" rel="noopener noreferrer" title="Ver video del ejercicio">
+              <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio">
                 <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
-              </a>
+              </button>
             )}
+            <VideoModal url={videoUrl} onClose={() => setVideoUrl(null)} />
           </div>
           {exercise?.muscle_group && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>

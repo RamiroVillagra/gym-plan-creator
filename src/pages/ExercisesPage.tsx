@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
+import VideoModal from "@/components/VideoModal";
 
 export default function ExercisesPage() {
   const queryClient = useQueryClient();
@@ -25,6 +26,8 @@ export default function ExercisesPage() {
   const [editCategoryId, setEditCategoryId] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editVideoUrl, setEditVideoUrl] = useState("");
+
+  const [watchingUrl, setWatchingUrl] = useState<string | null>(null);
 
   // Category management
   const [catOpen, setCatOpen] = useState(false);
@@ -244,9 +247,9 @@ export default function ExercisesPage() {
         <div className="flex items-center gap-2">
           <p className="font-medium text-foreground">{ex.name}</p>
           {ex.video_url && (
-            <a href={ex.video_url} target="_blank" rel="noopener noreferrer" title="Ver video">
+            <button onClick={() => setWatchingUrl(ex.video_url)} title="Ver video">
               <Play className="h-3.5 w-3.5 text-primary hover:text-primary/70 transition-colors" />
-            </a>
+            </button>
           )}
         </div>
         <div className="flex gap-2 mt-1">
@@ -273,6 +276,7 @@ export default function ExercisesPage() {
 
   return (
     <div className="animate-fade-in">
+      <VideoModal url={watchingUrl} onClose={() => setWatchingUrl(null)} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-heading font-bold">Ejercicios</h1>
