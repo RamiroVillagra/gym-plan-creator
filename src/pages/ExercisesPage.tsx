@@ -242,22 +242,28 @@ export default function ExercisesPage() {
   };
 
   const renderExercise = (ex: any) => (
-    <div key={ex.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors">
-      <div>
+    <div key={ex.id} className="group flex items-center justify-between bg-card border border-border/60 rounded-xl px-4 py-3 hover:border-primary/30 transition-all duration-200 relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-medium text-foreground">{ex.name}</p>
+          <p className="font-semibold text-foreground text-sm">{ex.name}</p>
           {ex.video_url && (
-            <button onClick={() => setWatchingUrl(ex.video_url)} title="Ver video">
-              <Play className="h-3.5 w-3.5 text-primary hover:text-primary/70 transition-colors" />
+            <button
+              onClick={() => setWatchingUrl(ex.video_url)}
+              title="Ver video"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
+            >
+              <Play className="h-2.5 w-2.5 text-primary" />
+              <span className="text-[9px] font-bold text-primary uppercase tracking-wide">Video</span>
             </button>
           )}
         </div>
-        <div className="flex gap-2 mt-1">
-          {ex.description && <span className="text-xs text-muted-foreground">{ex.description}</span>}
-        </div>
+        {ex.description && (
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">{ex.description}</p>
+        )}
       </div>
-      <div className="flex gap-1">
-        <Button variant="ghost" size="icon" onClick={() => {
+      <div className="flex gap-1 shrink-0">
+        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-60 group-hover:opacity-100 transition-opacity" onClick={() => {
           setEditId(ex.id);
           setEditName(ex.name);
           setEditCategoryId((ex as any).category_id ?? "");
@@ -265,10 +271,10 @@ export default function ExercisesPage() {
           setEditVideoUrl((ex as any).video_url ?? "");
           setEditOpen(true);
         }}>
-          <Pencil className="h-4 w-4 text-muted-foreground" />
+          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => handleDeleteClick({ id: ex.id, name: ex.name })}>
-          <Trash2 className="h-4 w-4 text-destructive" />
+        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-60 group-hover:opacity-100 transition-opacity" onClick={() => handleDeleteClick({ id: ex.id, name: ex.name })}>
+          <Trash2 className="h-3.5 w-3.5 text-destructive" />
         </Button>
       </div>
     </div>
@@ -277,10 +283,11 @@ export default function ExercisesPage() {
   return (
     <div className="animate-fade-in">
       <VideoModal url={watchingUrl} onClose={() => setWatchingUrl(null)} />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-heading font-bold">Ejercicios</h1>
-          <p className="text-muted-foreground">Biblioteca de ejercicios disponibles</p>
+          <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-1">Biblioteca</p>
+          <h1 className="text-4xl font-heading font-bold tracking-tight">Ejercicios</h1>
+          <p className="text-muted-foreground text-sm mt-1">Biblioteca de ejercicios disponibles</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setCatOpen(true)}>
@@ -331,14 +338,24 @@ export default function ExercisesPage() {
               <div key={key}>
                 <button
                   onClick={() => toggleCat(key)}
-                  className="flex items-center gap-2 mb-2 text-sm font-bold text-primary uppercase tracking-wider"
+                  className="flex items-center gap-2 mb-2 w-full group"
                 >
-                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  {group.catName}
-                  <span className="text-xs font-normal text-muted-foreground">({group.items?.length ?? 0})</span>
+                  <div className="flex items-center gap-2 flex-1">
+                    {isCollapsed
+                      ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    }
+                    <span className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.15em]">
+                      {group.catName}
+                    </span>
+                    <span className="text-[10px] font-data text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">
+                      {group.items?.length ?? 0}
+                    </span>
+                  </div>
+                  <div className="flex-1 h-px bg-border/50" />
                 </button>
                 {!isCollapsed && (
-                  <div className="grid gap-2 ml-2">
+                  <div className="grid gap-1.5">
                     {group.items?.map(renderExercise)}
                   </div>
                 )}

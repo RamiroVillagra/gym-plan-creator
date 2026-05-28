@@ -37,53 +37,119 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <img src="/logo.png" alt="Delta App" className="h-10 w-10 object-contain" />
-          <span className="font-heading text-2xl font-bold text-foreground">Delta App</span>
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-background">
+
+      {/* Ambient glow orbs — subtle depth, not distracting */}
+      <div
+        className="absolute top-1/4 left-1/3 w-[480px] h-[480px] rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(circle, hsl(var(--primary) / 0.07) 0%, transparent 70%)" }}
+      />
+      <div
+        className="absolute bottom-1/4 right-1/4 w-[360px] h-[360px] rounded-full pointer-events-none"
+        style={{ background: "radial-gradient(circle, hsl(var(--primary) / 0.05) 0%, transparent 70%)" }}
+      />
+
+      {/* Card */}
+      <div className="w-full max-w-sm relative z-10 animate-scale-in">
+
+        {/* Logo mark */}
+        <div className="flex flex-col items-center gap-3 mb-8">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-xl" />
+            <div className="relative h-14 w-14 rounded-2xl bg-primary/12 border border-primary/25 flex items-center justify-center ring-1 ring-primary/15 ring-offset-1 ring-offset-background">
+              <img src="/logo.png" alt="Delta App" className="h-8 w-8 object-contain" />
+            </div>
+          </div>
+          <div className="text-center">
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">
+              Delta App
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5 font-data tracking-wider uppercase">
+              Training Platform
+            </p>
+          </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6">
-          <h2 className="text-xl font-heading font-bold mb-6 text-center">
+        {/* Form card */}
+        <div className="relative bg-card border border-border/60 rounded-2xl p-6 shadow-card overflow-hidden">
+          {/* Card top-light */}
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/8 to-transparent" />
+
+          <h2 className="text-lg font-heading font-semibold mb-1 text-foreground">
             {isLogin ? "Iniciar Sesión" : "Crear Cuenta"}
           </h2>
+          <p className="text-xs text-muted-foreground mb-6">
+            {isLogin
+              ? "Ingresá tus credenciales para continuar"
+              : "Completá tus datos para registrarte"
+            }
+          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             {!isLogin && (
-              <Input
-                placeholder="Nombre completo"
-                value={fullName}
-                onChange={e => setFullName(e.target.value)}
-                required
-              />
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Nombre completo
+                </label>
+                <Input
+                  placeholder="Tu nombre"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  required
+                  className="bg-input/60 border-border/60 focus:border-primary/50 transition-colors"
+                />
+              </div>
             )}
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-            <Button type="submit" className="w-full" disabled={loading}>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Email
+              </label>
+              <Input
+                type="email"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                className="bg-input/60 border-border/60 focus:border-primary/50 transition-colors"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Contraseña
+              </label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="bg-input/60 border-border/60 focus:border-primary/50 transition-colors"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full mt-2 font-semibold tracking-wide shadow-glow-sm hover:shadow-glow transition-all duration-200"
+              disabled={loading}
+            >
               {loading ? "Cargando..." : isLogin ? "Entrar" : "Registrarse"}
             </Button>
           </form>
 
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-foreground transition-colors"
-          >
-            {isLogin ? "¿No tenés cuenta? Registrate" : "¿Ya tenés cuenta? Iniciá sesión"}
-          </button>
+          <div className="mt-5 pt-4 border-t border-border/40">
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors font-medium"
+            >
+              {isLogin
+                ? "¿No tenés cuenta? · Registrate"
+                : "¿Ya tenés cuenta? · Iniciá sesión"
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>

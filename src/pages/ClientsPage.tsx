@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { format, addDays, addWeeks, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -277,11 +277,18 @@ export default function ClientsPage() {
         </Button>
 
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-heading font-bold">{selectedClient.name}</h1>
-            <div className="flex gap-3 mt-1 text-sm text-muted-foreground">
-              {selectedClient.email && <span>{selectedClient.email}</span>}
-              {selectedClient.phone && <span>{selectedClient.phone}</span>}
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-primary/10 ring-2 ring-primary/20 flex items-center justify-center shrink-0">
+              <span className="text-sm font-bold text-primary font-data">
+                {selectedClient.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-heading font-bold tracking-tight">{selectedClient.name}</h1>
+              <div className="flex gap-3 mt-0.5 text-xs text-muted-foreground">
+                {selectedClient.email && <span>{selectedClient.email}</span>}
+                {selectedClient.phone && <span>{selectedClient.phone}</span>}
+              </div>
             </div>
           </div>
           <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(selectedClient.id)}>
@@ -313,14 +320,19 @@ export default function ClientsPage() {
           ) : (
             <div className="space-y-2">
               {clientWorkouts.map((w: any) => (
-                <div key={w.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2">
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-foreground">
-                      {format(new Date(w.workout_date + "T12:00:00"), "EEE d MMM", { locale: es })}
-                    </span>
-                    {w.routines?.name && (
-                      <span className="text-xs text-muted-foreground ml-2">— {w.routines.name}</span>
-                    )}
+                <div key={w.id} className="group flex items-center justify-between bg-card border border-border/60 rounded-xl px-4 py-3 hover:border-primary/30 transition-all duration-200">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="h-7 w-7 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                      <CalendarDays className="h-3.5 w-3.5 text-primary/70" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-semibold text-foreground">
+                        {format(new Date(w.workout_date + "T12:00:00"), "EEE d MMM", { locale: es })}
+                      </span>
+                      {w.routines?.name && (
+                        <span className="text-xs text-muted-foreground ml-2">— {w.routines.name}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => {
@@ -499,10 +511,11 @@ export default function ClientsPage() {
   // Client list
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-heading font-bold">Clientes</h1>
-          <p className="text-muted-foreground">Gestiona tus alumnos</p>
+          <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-1">Gestión</p>
+          <h1 className="text-4xl font-heading font-bold tracking-tight">Clientes</h1>
+          <p className="text-muted-foreground text-sm mt-1">Gestiona tus alumnos</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -538,13 +551,21 @@ export default function ClientsPage() {
             <button
               key={client.id}
               onClick={() => setSelectedClient(client)}
-              className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3 hover:border-primary/30 transition-colors w-full text-left"
+              className="group flex items-center justify-between bg-card border border-border/60 rounded-xl px-4 py-3.5 hover:border-primary/35 hover:shadow-card transition-all duration-200 w-full text-left relative overflow-hidden"
             >
-              <div className="flex items-center gap-2 min-w-0">
+              {/* Top-light */}
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Initials avatar */}
+                <div className="h-9 w-9 rounded-full bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
+                  <span className="text-xs font-bold text-primary font-data">
+                    {client.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+                  </span>
+                </div>
                 <div className="min-w-0">
-                  <p className="font-medium text-foreground">{client.name}</p>
-                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                    {client.email && <span>{client.email}</span>}
+                  <p className="font-semibold text-foreground text-sm">{client.name}</p>
+                  <div className="flex gap-3 mt-0.5 text-xs text-muted-foreground">
+                    {client.email && <span className="truncate">{client.email}</span>}
                     {client.phone && <span>{client.phone}</span>}
                   </div>
                 </div>
@@ -559,13 +580,13 @@ export default function ClientsPage() {
                   className={`shrink-0 p-1.5 rounded-full transition-colors ${
                     (client as any).notes
                       ? "text-primary bg-primary/10 hover:bg-primary/20"
-                      : "text-muted-foreground/30 hover:text-muted-foreground hover:bg-secondary"
+                      : "text-muted-foreground/20 hover:text-muted-foreground hover:bg-secondary"
                   }`}
                 >
                   <Info className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <span className="text-xs text-muted-foreground">→</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary/60 group-hover:translate-x-0.5 transition-all duration-200 shrink-0" />
             </button>
           ))}
         </div>

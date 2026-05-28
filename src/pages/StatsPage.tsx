@@ -80,9 +80,10 @@ export default function StatsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
-        <TrendingUp className="h-7 w-7 text-primary" />
-        <h1 className="font-heading text-2xl font-bold">Estadísticas</h1>
+      <div className="mb-10">
+        <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-2">Análisis</p>
+        <h1 className="text-4xl font-heading font-bold tracking-tight">Estadísticas</h1>
+        <p className="text-muted-foreground text-sm mt-1">Progresión de carga por cliente y ejercicio</p>
       </div>
 
       {/* Selectores */}
@@ -171,21 +172,26 @@ export default function StatsPage() {
 
       {/* Contenido */}
       {!selectedClient || !selectedExercise ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>Elegí un cliente y un ejercicio para ver la progresión.</p>
+        <div className="text-center py-24 text-muted-foreground">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/8 ring-1 ring-primary/15 mx-auto mb-4">
+            <TrendingUp className="h-7 w-7 text-primary/50" />
+          </div>
+          <p className="text-sm">Elegí un cliente y un ejercicio para ver la progresión.</p>
         </div>
       ) : isLoading ? (
-        <div className="text-center py-20 text-muted-foreground">Cargando...</div>
+        <div className="text-center py-20 text-muted-foreground text-sm">Cargando...</div>
       ) : sortedLogs.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>No hay registros de <span className="text-foreground font-medium">{exerciseName}</span> para <span className="text-foreground font-medium">{clientName}</span>.</p>
+        <div className="text-center py-24 text-muted-foreground">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/60 mx-auto mb-4">
+            <TrendingUp className="h-7 w-7 opacity-30" />
+          </div>
+          <p className="text-sm">No hay registros de <span className="text-foreground font-medium">{exerciseName}</span> para <span className="text-foreground font-medium">{clientName}</span>.</p>
         </div>
       ) : (
         <div className="space-y-8">
           {/* Gráfico */}
-          <div className="bg-card border border-border rounded-xl p-6">
+          <div className="bg-card border border-border/60 rounded-2xl p-6 relative overflow-hidden shadow-card">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
             <h2 className="font-heading font-semibold text-foreground mb-1">{exerciseName}</h2>
             <p className="text-xs text-muted-foreground mb-6">Peso máximo por sesión — {clientName}</p>
             <ResponsiveContainer width="100%" height={260}>
@@ -229,18 +235,19 @@ export default function StatsPage() {
           </div>
 
           {/* Tabla de registros */}
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-border">
-              <h2 className="font-heading font-semibold text-foreground">Historial de series</h2>
+          <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-card relative">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
+            <div className="px-6 py-4 border-b border-border/50">
+              <h2 className="font-heading font-semibold text-foreground text-sm">Historial de series</h2>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-secondary/30">
-                    <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Fecha</th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Serie</th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reps</th>
-                    <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Peso</th>
+                  <tr className="border-b border-border/50 bg-muted/20">
+                    <th className="text-left px-6 py-3 text-[10px] font-data font-bold text-muted-foreground uppercase tracking-widest">Fecha</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-data font-bold text-muted-foreground uppercase tracking-widest">Serie</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-data font-bold text-muted-foreground uppercase tracking-widest">Reps</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-data font-bold text-muted-foreground uppercase tracking-widest">Peso</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -249,17 +256,17 @@ export default function StatsPage() {
                     const prevDate = i > 0 ? sortedLogs[i - 1].assigned_workouts.workout_date : null;
                     const isNewDate = date !== prevDate;
                     return (
-                      <tr key={i} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                        <td className="px-6 py-3 text-foreground">
+                      <tr key={i} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                        <td className="px-6 py-3 text-sm text-foreground capitalize">
                           {isNewDate
                             ? format(parseISO(date), "EEEE d MMM yyyy", { locale: es })
-                            : <span className="text-muted-foreground">—</span>
+                            : <span className="text-muted-foreground/40">—</span>
                           }
                         </td>
-                        <td className="px-4 py-3 text-center text-muted-foreground">{log.set_number}</td>
-                        <td className="px-4 py-3 text-center text-foreground">{log.reps_done ?? "—"}</td>
-                        <td className="px-4 py-3 text-center font-medium text-primary">
-                          {log.weight_used != null ? `${log.weight_used} kg` : "—"}
+                        <td className="px-4 py-3 text-center font-data text-xs text-muted-foreground">{log.set_number}</td>
+                        <td className="px-4 py-3 text-center font-data text-xs text-foreground">{log.reps_done ?? "—"}</td>
+                        <td className="px-4 py-3 text-center font-data text-sm font-bold text-primary">
+                          {log.weight_used != null ? `${log.weight_used}kg` : "—"}
                         </td>
                       </tr>
                     );

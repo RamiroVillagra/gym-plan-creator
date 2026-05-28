@@ -1068,6 +1068,21 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     })
   );
 
+  // Re-sync logged sets when existingLogs refreshes (e.g. after saving a set)
+  useEffect(() => {
+    setLocalSets(prev =>
+      prev.map((s, i) => {
+        const log = existingLogs.find((l: any) => l.set_number === i + 1 && l.completed);
+        if (!log) return s; // not logged yet — keep what the user typed
+        return {
+          reps: log.reps_done?.toString() ?? s.reps,
+          weight: log.weight_used?.toString() ?? s.weight,
+        };
+      })
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingLogs]);
+
   useImperativeHandle(ref, () => ({
     assignedWorkoutId,
     exerciseId,

@@ -73,9 +73,10 @@ export default function StudentStatsPage() {
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <TrendingUp className="h-6 w-6 text-primary" />
-        <h1 className="font-heading text-2xl font-bold">Mi Progresión</h1>
+      <div className="mb-8">
+        <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-2">Tu evolución</p>
+        <h1 className="text-4xl font-heading font-bold tracking-tight">Mi Progresión</h1>
+        <p className="text-muted-foreground text-sm mt-1">Seguí tu carga a lo largo del tiempo</p>
       </div>
 
       {/* Selector ejercicio */}
@@ -118,21 +119,26 @@ export default function StudentStatsPage() {
       </div>
 
       {!selectedExercise ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>Elegí un ejercicio para ver tu progresión.</p>
+        <div className="text-center py-24 text-muted-foreground">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/8 ring-1 ring-primary/15 mx-auto mb-4">
+            <TrendingUp className="h-7 w-7 text-primary/50" />
+          </div>
+          <p className="text-sm">Elegí un ejercicio para ver tu progresión.</p>
         </div>
       ) : isLoading ? (
-        <div className="text-center py-16 text-muted-foreground">Cargando...</div>
+        <div className="text-center py-16 text-muted-foreground text-sm">Cargando...</div>
       ) : sortedLogs.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>No hay registros de <span className="text-foreground font-medium">{selectedExerciseName}</span> aún.</p>
+        <div className="text-center py-24 text-muted-foreground">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/60 mx-auto mb-4">
+            <TrendingUp className="h-7 w-7 opacity-30" />
+          </div>
+          <p className="text-sm">No hay registros de <span className="text-foreground font-medium">{selectedExerciseName}</span> aún.</p>
         </div>
       ) : (
         <div className="space-y-6">
           {/* Gráfico */}
-          <div className="bg-card border border-border rounded-xl p-4">
+          <div className="bg-card border border-border/60 rounded-2xl p-5 relative overflow-hidden shadow-card">
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
             <h2 className="font-heading font-semibold text-foreground mb-0.5">{selectedExerciseName}</h2>
             <p className="text-xs text-muted-foreground mb-4">Peso máximo por sesión</p>
             <ResponsiveContainer width="100%" height={220}>
