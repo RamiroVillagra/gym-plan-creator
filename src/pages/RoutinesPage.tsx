@@ -187,41 +187,25 @@ export default function RoutinesPage() {
     const rTotalDays = routine.total_days ?? 1;
 
     return (
-      <div key={routine.id} className="bg-card border border-border/60 rounded-2xl overflow-hidden transition-all duration-200 hover:border-border relative">
-        {/* Top-light */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent pointer-events-none" />
-
-        <div className="flex items-center justify-between px-4 py-3.5">
+      <div key={routine.id} className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3">
           <button
             onClick={() => setExpandedRoutine(isExpanded ? null : routine.id)}
-            className="flex items-center gap-3 text-left flex-1 min-w-0"
+            className="flex items-center gap-2 text-left flex-1"
           >
-            <div className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors shrink-0 ${isExpanded ? "bg-primary/15 text-primary" : "bg-muted/60 text-muted-foreground"}`}>
-              {isExpanded
-                ? <ChevronUp className="h-3.5 w-3.5" />
-                : <ChevronDown className="h-3.5 w-3.5" />
-              }
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-foreground text-sm">{routine.name}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] font-data text-muted-foreground">
-                  {rTotalDays} día{rTotalDays > 1 ? "s" : ""}
-                  {routine.description ? ` · ${routine.description}` : ""}
-                </span>
-                {routine.folder && (
-                  <span className="text-[10px] font-semibold text-primary/80 bg-primary/8 px-1.5 py-0.5 rounded-full border border-primary/15">
-                    {routine.folder}
-                  </span>
-                )}
-              </div>
+            {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            <div>
+              <p className="font-medium text-foreground">{routine.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {routine.description ? `${routine.description} · ` : ""}{rTotalDays} día{rTotalDays > 1 ? "s" : ""}
+                {routine.folder && <span className="ml-1 text-primary">📁 {routine.folder}</span>}
+              </p>
             </div>
           </button>
-          <div className="flex gap-0.5 shrink-0">
+          <div className="flex gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 opacity-60 hover:opacity-100 transition-opacity"
               title="Mover a carpeta"
               onClick={() => {
                 setMoveRoutineId(routine.id);
@@ -230,9 +214,9 @@ export default function RoutinesPage() {
                 setMoveOpen(true);
               }}
             >
-              <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
+              <FolderInput className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-60 hover:opacity-100 transition-opacity" onClick={() => {
+            <Button variant="ghost" size="icon" onClick={() => {
               setEditId(routine.id);
               setEditName(routine.name);
               setEditDesc(routine.description ?? "");
@@ -240,16 +224,16 @@ export default function RoutinesPage() {
               setEditFolder(routine.folder ?? "");
               setEditOpen(true);
             }}>
-              <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+              <Pencil className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-60 hover:opacity-100 transition-opacity" onClick={() => deleteRoutine.mutate(routine.id)}>
-              <Trash2 className="h-3.5 w-3.5 text-destructive" />
+            <Button variant="ghost" size="icon" onClick={() => deleteRoutine.mutate(routine.id)}>
+              <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </div>
         </div>
 
         {isExpanded && (
-          <div className="border-t border-border/50 px-4 py-4 bg-muted/10">
+          <div className="border-t border-border px-4 py-3">
             <RoutineDetailView
               routineId={routine.id}
               routineName={routine.name}
@@ -264,11 +248,10 @@ export default function RoutinesPage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-1">Planificación</p>
-          <h1 className="text-4xl font-heading font-bold tracking-tight">Rutinas</h1>
-          <p className="text-muted-foreground text-sm mt-1">Crea plantillas de rutinas con bloques y días</p>
+          <h1 className="text-3xl font-heading font-bold">Rutinas</h1>
+          <p className="text-muted-foreground">Crea plantillas de rutinas con bloques y días</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setNewFolderOpen(true)}>
@@ -307,13 +290,11 @@ export default function RoutinesPage() {
 
       {/* Folder tabs */}
       {allFolders.length > 0 && (
-        <div className="flex gap-1.5 mb-5 flex-wrap">
+        <div className="flex gap-1 mb-4 flex-wrap">
           <button
             onClick={() => setActiveFolder(null)}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-              !activeFolder
-                ? "bg-primary text-primary-foreground shadow-glow-sm"
-                : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              !activeFolder ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
             }`}
           >
             Todas
@@ -342,15 +323,13 @@ export default function RoutinesPage() {
                   <>
                     <button
                       onClick={() => setActiveFolder(isActive ? null : f)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
-                        isActive
-                          ? "bg-primary text-primary-foreground shadow-glow-sm"
-                          : "bg-secondary/60 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       {isActive ? <FolderOpen className="h-3 w-3" /> : <Folder className="h-3 w-3" />}
                       {f}
-                      {!hasRoutines && <span className="opacity-40 ml-0.5 font-normal">(vacía)</span>}
+                      {!hasRoutines && <span className="opacity-50 ml-0.5">(vacía)</span>}
                     </button>
                     <button
                       onClick={() => { setRenamingFolder(f); setRenameFolderValue(f); }}

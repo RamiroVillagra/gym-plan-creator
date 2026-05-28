@@ -112,10 +112,10 @@ export default function StudentHomePage() {
     <div className="animate-fade-in max-w-2xl mx-auto">
       {/* Header */}
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-heading font-bold tracking-tight capitalize">
+        <h1 className="text-3xl font-heading font-bold capitalize">
           {format(currentDate, "MMMM yyyy", { locale: es })}
         </h1>
-        <p className="text-xs text-muted-foreground mt-1.5 capitalize font-data tracking-wide">
+        <p className="text-sm text-muted-foreground mt-1 capitalize">
           {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
         </p>
       </div>
@@ -179,25 +179,22 @@ export default function StudentHomePage() {
             return (
               <div
                 key={dateStr}
-                onClick={() => { if (hasWorkout) setSelectedWorkout(dayWorkouts[0]); }}
-                className={`relative rounded-xl p-1.5 min-h-[64px] flex flex-col overflow-hidden transition-all duration-200 ${
+                onClick={() => {
+                  if (hasWorkout) setSelectedWorkout(dayWorkouts[0]);
+                }}
+                className={`rounded-xl p-1.5 min-h-[64px] flex flex-col overflow-hidden transition-colors ${
                   hasWorkout ? "cursor-pointer" : "cursor-default"
                 } ${
                   isToday
-                    ? "border-2 border-primary bg-gradient-to-b from-primary/12 to-primary/5 shadow-glow-sm"
+                    ? "border-2 border-primary bg-primary/5"
                     : hasWorkout
-                    ? "border border-primary/25 bg-card hover:border-primary/50 hover:bg-primary/5 hover:-translate-y-px"
-                    : "border border-border/50 bg-card/40"
-                } ${!isCurrentMonth ? "opacity-20" : ""}`}
+                    ? "border border-primary/30 bg-card hover:bg-primary/5"
+                    : "border border-border bg-card/50"
+                } ${!isCurrentMonth ? "opacity-25" : ""}`}
               >
-                {/* Top shimmer on today */}
-                {isToday && (
-                  <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-primary/80 to-transparent" />
-                )}
-
-                {/* Day number + check */}
+                {/* Número del día + check */}
                 <div className="flex items-center justify-between mb-0.5">
-                  <p className={`text-xs font-bold leading-none font-data ${isToday ? "text-primary" : "text-foreground"}`}>
+                  <p className={`text-xs font-bold leading-none ${isToday ? "text-primary" : "text-foreground"}`}>
                     {format(day, "d")}
                   </p>
                   {isCompleted && (
@@ -205,16 +202,16 @@ export default function StudentHomePage() {
                   )}
                 </div>
 
-                {/* Workout name */}
+                {/* Nombre del entrenamiento — truncado, nunca desborda */}
                 {hasWorkout && dayWorkouts[0] && (
                   <div className="min-w-0 flex-1">
                     <p className={`text-[9px] font-semibold leading-tight truncate ${
-                      isCompleted ? "text-primary" : isToday ? "text-primary" : isPast ? "text-muted-foreground/70" : "text-foreground/80"
+                      isCompleted ? "text-primary" : isToday ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground"
                     }`}>
                       {dayWorkouts[0].routines?.name ?? "Sesión"}
                     </p>
                     {(dayWorkouts[0].routines?.total_days ?? 1) > 1 && (
-                      <p className="text-[8px] text-muted-foreground/60 leading-none mt-0.5 font-data">
+                      <p className="text-[8px] text-muted-foreground leading-none mt-0.5">
                         D{dayWorkouts[0].day_number ?? 1}
                       </p>
                     )}
@@ -236,25 +233,20 @@ export default function StudentHomePage() {
         );
         return (
           <div className="mt-6">
-            <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-3">Hoy</p>
+            <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Hoy</p>
             {todayWorkouts.map((w: any) => (
               <button
                 key={w.id}
                 onClick={() => setSelectedWorkout(w)}
-                className="w-full flex items-center justify-between bg-gradient-to-r from-primary to-primary/85 text-primary-foreground rounded-2xl px-5 py-4 font-semibold hover:opacity-90 active:scale-[0.99] transition-all duration-150 shadow-glow relative overflow-hidden group"
+                className="w-full flex items-center justify-between bg-primary text-primary-foreground rounded-xl px-4 py-3.5 font-semibold hover:bg-primary/90 transition-colors"
               >
-                {/* Shimmer top edge */}
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
                 <div className="text-left">
-                  <p className="font-heading font-bold text-base tracking-tight">{w.routines?.name ?? "Sesión"}</p>
+                  <p className="font-bold">{w.routines?.name ?? "Sesión"}</p>
                   {(w.routines?.total_days ?? 1) > 1 && (
-                    <p className="text-xs opacity-75 font-data mt-0.5">Día {w.day_number ?? 1}</p>
+                    <p className="text-xs opacity-80">Día {w.day_number ?? 1}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-data font-bold opacity-75 uppercase tracking-wider">Comenzar</span>
-                  <ChevronRight className="h-5 w-5 group-hover:translate-x-0.5 transition-transform duration-200" />
-                </div>
+                <ChevronRight className="h-5 w-5" />
               </button>
             ))}
           </div>
@@ -429,7 +421,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
         return (
           <div key={blockNum} className="mb-4">
             {blocks.length > 1 && (
-              <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-2">Bloque {blockNum}</p>
+              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque {blockNum}</p>
             )}
             {blockExercises.map((re: any) => (
               <ExerciseCard
@@ -467,9 +459,8 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
         <button
           onClick={() => saveAllSets.mutate()}
           disabled={saveAllSets.isPending}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary/85 text-primary-foreground font-bold text-base tracking-wide shadow-glow hover:opacity-90 active:scale-[0.99] transition-all duration-150 disabled:opacity-60 flex items-center justify-center gap-2 mt-2 relative overflow-hidden"
+          className="w-full py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-base tracking-wide shadow-md hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
         >
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
           <CheckCircle2 className="h-5 w-5" />
           {saveAllSets.isPending ? "Guardando..." : "Guardar sesión completa"}
         </button>
@@ -497,9 +488,8 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
     setSaved(true);
   }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="bg-card border border-border/60 rounded-2xl p-4 mt-4 relative overflow-hidden">
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
-      <p className="text-[11px] font-data font-bold text-primary uppercase tracking-[0.2em] mb-2">Comentarios de la sesión</p>
+    <div className="bg-card border border-border rounded-xl p-4 mt-4">
+      <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Comentarios de la sesión</p>
       <textarea
         className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
         rows={3}
@@ -557,21 +547,14 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   }));
 
   return (
-    <div className="bg-card border border-border/60 rounded-2xl p-4 mb-3 relative overflow-hidden">
-      {/* Top-light */}
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/6 to-transparent" />
+    <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-base font-heading font-bold text-foreground">{exercise?.name}</p>
+            <p className="text-lg font-heading font-bold text-foreground">{exercise?.name}</p>
             {(exercise as any)?.video_url && (
-              <button
-                onClick={() => setVideoUrl((exercise as any).video_url)}
-                title="Ver video del ejercicio"
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors"
-              >
-                <Play className="h-2.5 w-2.5 text-primary" />
-                <span className="text-[9px] font-bold text-primary uppercase tracking-wide">Video</span>
+              <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio">
+                <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
               </button>
             )}
             <VideoModal url={videoUrl} onClose={() => setVideoUrl(null)} />
@@ -602,22 +585,22 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       </div>
 
       {showPrev && prevLogs.length > 0 && (
-        <div className="bg-muted/40 border border-border/40 rounded-xl px-3 py-2 mb-3">
-          <p className="text-[10px] font-data font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Sesión anterior</p>
+        <div className="bg-secondary/50 rounded-lg px-3 py-2 mb-3">
+          <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">Sesión anterior</p>
           {prevLogs.sort((a, b) => a.set_number - b.set_number).map((l: any) => (
-            <p key={l.id} className="text-[10px] text-muted-foreground font-data">
-              S{l.set_number}: {l.reps_done ?? "—"} × {l.weight_used ?? "—"}{unit}
+            <p key={l.id} className="text-[10px] text-muted-foreground">
+              Serie {l.set_number}: {l.reps_done ?? "—"} reps @ {l.weight_used ?? "—"}{unit}
             </p>
           ))}
         </div>
       )}
 
-      {/* Column headers */}
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] font-data text-muted-foreground/60 w-16" />
-        <span className="text-[10px] font-data font-bold text-muted-foreground/60 uppercase tracking-wider w-16 text-center">Reps</span>
-        <span className="text-[10px] font-data font-bold text-muted-foreground/60 uppercase tracking-wider w-20 text-center">Planif.</span>
-        <span className="text-[10px] font-data font-bold text-muted-foreground/60 uppercase tracking-wider w-20 text-center">Realiz.</span>
+      {/* Headers */}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] text-muted-foreground w-16" />
+        <span className="text-[10px] text-muted-foreground w-16 text-center">Reps</span>
+        <span className="text-[10px] text-muted-foreground w-20 text-center">Planif.</span>
+        <span className="text-[10px] text-muted-foreground w-20 text-center">Realiz.</span>
         <span className="w-7" />
       </div>
 
@@ -626,36 +609,34 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
           return (
             <div key={i} className="flex items-center gap-2">
-              <span className="text-xs font-data text-muted-foreground w-16">S{i + 1}</span>
+              <span className="text-sm text-muted-foreground w-16">Serie {i + 1}</span>
               <Input
                 type="number"
                 inputMode="numeric"
-                className="w-16 h-9 text-sm text-center font-data"
+                className="w-16 h-10 text-base text-center"
                 value={s.reps}
                 onChange={e => { const n = [...localSets]; n[i].reps = e.target.value; setLocalSets(n); }}
               />
-              <span className="text-xs text-muted-foreground/60 w-20 text-center font-data">
+              <span className="text-xs text-muted-foreground w-20 text-center">
                 {allSets[i]?.targetWeight ? `${allSets[i].targetWeight}${unit}` : "—"}
               </span>
               <Input
                 type="number"
                 inputMode="numeric"
                 placeholder={unit}
-                className="w-20 h-9 text-sm font-data"
+                className="w-20 h-10 text-base"
                 value={s.weightDone}
                 onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
               />
-              <button
-                className="transition-transform duration-150 active:scale-90"
-                onClick={() => onLogSet({
-                  exercise_id: exerciseId,
-                  set_number: i + 1,
-                  reps_done: parseInt(s.reps) || 0,
-                  weight_used: parseFloat(s.weightDone) || 0,
-                })}>
+              <button onClick={() => onLogSet({
+                exercise_id: exerciseId,
+                set_number: i + 1,
+                reps_done: parseInt(s.reps) || 0,
+                weight_used: parseFloat(s.weightDone) || 0,
+              })}>
                 {isLogged
-                  ? <CheckCircle2 className="h-7 w-7 text-primary drop-shadow-[0_0_6px_hsl(var(--primary)/0.5)]" />
-                  : <Circle className="h-7 w-7 text-muted-foreground/40 hover:text-primary transition-colors" />
+                  ? <CheckCircle2 className="h-7 w-7 text-primary" />
+                  : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />
                 }
               </button>
             </div>
