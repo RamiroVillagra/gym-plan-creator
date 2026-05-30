@@ -851,7 +851,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               <span className="text-[10px] text-muted-foreground">×</span>
                               <Input type="number" className="w-12 h-6 text-xs px-1" value={g.reps} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, reps: e.target.value } : x))} placeholder="R" />
                               <span className="text-[10px] text-muted-foreground">@</span>
-                              <Input type="number" className="w-16 h-6 text-xs px-1" value={g.weight} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))} placeholder={re.unit ?? "kg"} />
+                              <Input type="number" className="w-16 h-6 text-xs px-1" value={g.weight} onChange={e => setEditingGroups(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))} placeholder="kg" />
                               <button onClick={() => setEditingGroups(prev => prev.filter((_, j) => j !== i))} className="text-destructive hover:opacity-70">
                                 <Trash2 className="h-3 w-3" />
                               </button>

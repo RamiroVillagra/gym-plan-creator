@@ -323,6 +323,9 @@ export default function BlocksPage() {
                           value={ex.weight}
                           onChange={e => setBlockExs(prev => prev.map((x, j) => j === i ? { ...x, weight: e.target.value } : x))}
                         />
+                        {(ex.unit === "m" || ex.unit === "cm") && (
+                          <span className="text-xs text-muted-foreground">kg</span>
+                        )}
                         <div className="flex rounded-md border border-input overflow-hidden h-7">
                           {["kg", "seg", "m", "cm"].map(u => (
                             <button
