@@ -559,9 +559,6 @@ const ExerciseCard = forwardRef(function ExerciseCard({
             )}
             <VideoModal url={videoUrl} onClose={() => setVideoUrl(null)} />
           </div>
-          {exercise?.muscle_group && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{exercise.muscle_group}</span>
-          )}
           {coachNotes && (
             <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
           )}
