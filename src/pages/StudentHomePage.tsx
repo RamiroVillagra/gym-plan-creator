@@ -548,12 +548,12 @@ const ExerciseCard = forwardRef(function ExerciseCard({
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <p className="text-lg font-heading font-bold text-foreground">{exercise?.name}</p>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-2">
+            <p className="text-lg font-heading font-bold text-foreground leading-snug break-words">{exercise?.name}</p>
             {(exercise as any)?.video_url && (
-              <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio">
+              <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio" className="shrink-0 mt-0.5">
                 <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
               </button>
             )}
@@ -566,7 +566,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
             <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {setGroups?.length ? (
             <div className="text-right">
               {setGroups.map((g, i) => (
@@ -574,7 +574,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
               ))}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground">{sets}×{reps}{weight ? ` @ ${weight}${unit}` : ""}</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{sets}×{reps}{weight ? ` @ ${weight}${unit}` : ""}</span>
           )}
           {prevLogs.length > 0 && (
             <button onClick={() => setShowPrev(!showPrev)} className="p-1 rounded hover:bg-secondary transition-colors">
