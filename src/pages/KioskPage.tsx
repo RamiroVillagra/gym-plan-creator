@@ -362,6 +362,7 @@ export default function KioskPage() {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
       toast.success("Serie registrada");
     },
+    onError: () => toast.error("Error al registrar la serie"),
   });
 
   const logAllSets = useMutation({
@@ -394,37 +395,49 @@ export default function KioskPage() {
         if (logError) throw logError;
       }
 
-      // 2. Sobreescribir assigned_workout_exercises con valores reales
-      for (const { assignedWorkoutId, exerciseId, sets: exerciseSets } of Object.values(byExercise)) {
+      // 2. Actualizar assigned_workout_exercises con los valores registrados
+      const exerciseEntries = Object.values(byExercise);
+      const allWorkoutIds = [...new Set(exerciseEntries.map(e => e.assignedWorkoutId))];
+
+      // Una sola query para traer todos los registros existentes
+      const { data: existingRows, error: selectError } = await supabase
+        .from("assigned_workout_exercises")
+        .select("id, exercise_id, assigned_workout_id")
+        .in("assigned_workout_id", allWorkoutIds);
+      if (selectError) throw selectError;
+
+      const existingMap = new Map(
+        (existingRows ?? []).map(r => [`${r.assigned_workout_id}__${r.exercise_id}`, r.id])
+      );
+
+      // Actualizar/insertar en paralelo con manejo de errores
+      await Promise.all(exerciseEntries.map(async ({ assignedWorkoutId, exerciseId, sets: exerciseSets }) => {
         const totalSets = exerciseSets.length;
         const reps = exerciseSets[0]?.reps_done ?? 0;
         const weight = exerciseSets[0]?.weight_used ?? 0;
+        const existingId = existingMap.get(`${assignedWorkoutId}__${exerciseId}`);
 
-        const { data: existing } = await supabase
-          .from("assigned_workout_exercises")
-          .select("id")
-          .eq("assigned_workout_id", assignedWorkoutId)
-          .eq("exercise_id", exerciseId)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase.from("assigned_workout_exercises")
+        if (existingId) {
+          const { error } = await supabase.from("assigned_workout_exercises")
             .update({ sets: totalSets, reps, weight })
-            .eq("id", existing.id);
+            .eq("id", existingId);
+          if (error) throw error;
         } else {
-          await supabase.from("assigned_workout_exercises").insert({
+          const { error } = await supabase.from("assigned_workout_exercises").insert({
             assigned_workout_id: assignedWorkoutId,
             exercise_id: exerciseId,
             sets: totalSets,
             reps,
             weight,
           });
+          if (error) throw error;
         }
-      }
+      }));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
       queryClient.invalidateQueries({ queryKey: ["kiosk-assigned-exercises"] });
+      queryClient.invalidateQueries({ queryKey: ["exercise-history"] });
       toast.success("¡Sesión guardada completa!");
     },
     onError: () => toast.error("Error al guardar la sesión"),
@@ -1073,8 +1086,8 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     exerciseId,
     getSets: () => localSets.map((s, i) => ({
       set_number: i + 1,
-      reps_done: parseInt(s.reps) || 0,
-      weight_used: parseFloat(s.weight) || 0,
+      reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
+      weight_used: parseFloat(s.weight) || allSets[i]?.targetWeight || 0,
     })),
   }));
 
