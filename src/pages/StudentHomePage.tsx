@@ -532,7 +532,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       const prevLog = prevLogs.find((l: any) => l.set_number === i + 1);
       return {
         reps: log?.reps_done?.toString() ?? s.targetReps?.toString() ?? "",
-        weightDone: log?.weight_used?.toString() ?? prevLog?.weight_used?.toString() ?? "",
+        weightDone: log?.weight_used?.toString() ?? prevLog?.weight_used?.toString() ?? s.targetWeight?.toString() ?? "",
       };
     })
   );
@@ -541,8 +541,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
     exerciseId,
     getSets: () => localSets.map((s, i) => ({
       set_number: i + 1,
-      reps_done: parseInt(s.reps) || 0,
-      weight_used: parseFloat(s.weightDone) || 0,
+      reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
+      weight_used: parseFloat(s.weightDone) || allSets[i]?.targetWeight || 0,
     })),
   }));
 
