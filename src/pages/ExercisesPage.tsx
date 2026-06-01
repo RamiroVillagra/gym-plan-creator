@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -196,42 +196,53 @@ export default function ExercisesPage() {
   };
 
   const totalUsage = usageInfo ? usageInfo.routines + usageInfo.sessions + usageInfo.blocks + usageInfo.logs : 0;
-  const replaceOptions = exercises?.filter(e =>
-    e.id !== deleteConfirm?.id &&
-    e.name.toLowerCase().includes(replaceSearch.toLowerCase())
-  ) ?? [];
 
-  const filtered = exercises?.filter(e =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    ((e as any).exercise_categories?.name?.toLowerCase().includes(search.toLowerCase())) ||
-    (e.muscle_group?.toLowerCase().includes(search.toLowerCase()))
+  const replaceOptions = useMemo(() =>
+    exercises?.filter(e =>
+      e.id !== deleteConfirm?.id &&
+      e.name.toLowerCase().includes(replaceSearch.toLowerCase())
+    ) ?? [],
+    [exercises, deleteConfirm?.id, replaceSearch]
   );
 
-  // Group by category
-  const grouped: { catId: string | null; catName: string; items: typeof filtered }[] = [];
-  const catMap = new Map<string | null, (typeof filtered)>();
-  
-  filtered?.forEach(ex => {
-    const cid = (ex as any).category_id ?? null;
-    if (!catMap.has(cid)) catMap.set(cid, []);
-    catMap.get(cid)!.push(ex);
-  });
+  const filtered = useMemo(() =>
+    exercises?.filter(e =>
+      e.name.toLowerCase().includes(search.toLowerCase()) ||
+      ((e as any).exercise_categories?.name?.toLowerCase().includes(search.toLowerCase())) ||
+      (e.muscle_group?.toLowerCase().includes(search.toLowerCase()))
+    ),
+    [exercises, search]
+  );
 
-  // Sort: named categories first, then uncategorized
-  categories?.forEach(cat => {
-    if (catMap.has(cat.id)) {
-      grouped.push({ catId: cat.id, catName: cat.name, items: catMap.get(cat.id) });
-      catMap.delete(cat.id);
+  // Group by category — memoized so it only recomputes when exercises or categories change
+  const grouped = useMemo(() => {
+    const result: { catId: string | null; catName: string; items: typeof filtered }[] = [];
+    const catMap = new Map<string | null, (typeof filtered)>();
+
+    filtered?.forEach(ex => {
+      const cid = (ex as any).category_id ?? null;
+      if (!catMap.has(cid)) catMap.set(cid, []);
+      catMap.get(cid)!.push(ex);
+    });
+
+    // Sort: named categories first, then uncategorized
+    categories?.forEach(cat => {
+      if (catMap.has(cat.id)) {
+        result.push({ catId: cat.id, catName: cat.name, items: catMap.get(cat.id) });
+        catMap.delete(cat.id);
+      }
+    });
+    if (catMap.has(null)) {
+      result.push({ catId: null, catName: "Sin categoría", items: catMap.get(null) });
+      catMap.delete(null);
     }
-  });
-  if (catMap.has(null)) {
-    grouped.push({ catId: null, catName: "Sin categoría", items: catMap.get(null) });
-    catMap.delete(null);
-  }
-  // Any remaining (orphan category_ids)
-  catMap.forEach((items, cid) => {
-    grouped.push({ catId: cid, catName: "Otra", items });
-  });
+    // Any remaining (orphan category_ids)
+    catMap.forEach((items, cid) => {
+      result.push({ catId: cid, catName: "Otra", items });
+    });
+
+    return result;
+  }, [filtered, categories]);
 
   const toggleCat = (catId: string) => {
     setCollapsedCats(prev => {

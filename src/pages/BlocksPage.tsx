@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -47,9 +47,10 @@ export default function BlocksPage() {
     },
   });
 
-  const filteredEx = exercises?.filter(e =>
-    e.name.toLowerCase().includes(exSearch.toLowerCase())
-  ) ?? [];
+  const filteredEx = useMemo(() =>
+    exercises?.filter(e => e.name.toLowerCase().includes(exSearch.toLowerCase())) ?? [],
+    [exercises, exSearch]
+  );
 
   const openCreate = () => {
     setEditingId(null);

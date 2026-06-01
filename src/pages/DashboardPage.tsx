@@ -18,35 +18,22 @@ function StatCard({ icon: Icon, label, value, to }: { icon: any; label: string; 
 }
 
 export default function DashboardPage() {
-  const { data: clients } = useQuery({
-    queryKey: ["clients-count"],
+  // Single query with 4 parallel Supabase count requests — 1 render cycle instead of 4
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats"],
     queryFn: async () => {
-      const { count } = await supabase.from("clients").select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-  });
-
-  const { data: exercises } = useQuery({
-    queryKey: ["exercises-count"],
-    queryFn: async () => {
-      const { count } = await supabase.from("exercises").select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-  });
-
-  const { data: routines } = useQuery({
-    queryKey: ["routines-count"],
-    queryFn: async () => {
-      const { count } = await supabase.from("routines").select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-  });
-
-  const { data: workouts } = useQuery({
-    queryKey: ["workouts-count"],
-    queryFn: async () => {
-      const { count } = await supabase.from("assigned_workouts").select("*", { count: "exact", head: true });
-      return count ?? 0;
+      const [clients, exercises, routines, workouts] = await Promise.all([
+        supabase.from("clients").select("*", { count: "exact", head: true }),
+        supabase.from("exercises").select("*", { count: "exact", head: true }),
+        supabase.from("routines").select("*", { count: "exact", head: true }),
+        supabase.from("assigned_workouts").select("*", { count: "exact", head: true }),
+      ]);
+      return {
+        clients:   clients.count   ?? 0,
+        exercises: exercises.count ?? 0,
+        routines:  routines.count  ?? 0,
+        workouts:  workouts.count  ?? 0,
+      };
     },
   });
 
@@ -55,10 +42,10 @@ export default function DashboardPage() {
       <h1 className="text-3xl font-heading font-bold mb-2">Dashboard</h1>
       <p className="text-muted-foreground mb-8">Resumen general de tu sistema de entrenamiento</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="Clientes" value={clients ?? 0} to="/clients" />
-        <StatCard icon={ListChecks} label="Ejercicios" value={exercises ?? 0} to="/exercises" />
-        <StatCard icon={ClipboardList} label="Rutinas" value={routines ?? 0} to="/routines" />
-        <StatCard icon={CalendarDays} label="Entrenamientos" value={workouts ?? 0} to="/calendar" />
+        <StatCard icon={Users}        label="Clientes"        value={stats?.clients   ?? 0} to="/clients" />
+        <StatCard icon={ListChecks}   label="Ejercicios"      value={stats?.exercises ?? 0} to="/exercises" />
+        <StatCard icon={ClipboardList} label="Rutinas"        value={stats?.routines  ?? 0} to="/routines" />
+        <StatCard icon={CalendarDays} label="Entrenamientos"  value={stats?.workouts  ?? 0} to="/calendar" />
       </div>
     </div>
   );
