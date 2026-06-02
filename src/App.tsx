@@ -25,15 +25,17 @@ const BlocksPage       = lazy(() => import("./pages/BlocksPage"));
 const NotFound         = lazy(() => import("./pages/NotFound"));
 
 // Global QueryClient configuration
-// staleTime:5min  → navigating back within 5 min shows cached data instantly (no loading flash)
-// gcTime:10min    → keeps unused queries in memory for 10 min so re-mounting is instant
-// refetchOnWindowFocus:false → switching tabs/apps on mobile no longer triggers refetches
+// staleTime:0     → data is immediately stale; always background-refetches on mount
+//                   (safe for real-time training data — logs, kiosk sessions, etc.)
+// gcTime:5min     → keeps unused queries in memory for 5 min so re-navigating shows
+//                   cached data instantly while the background refetch completes
+// refetchOnWindowFocus:false → switching tabs/apps on mobile no longer triggers extra refetches
 // retry:1         → fail fast on network errors rather than retrying 3 times
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
+      staleTime: 0,
+      gcTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 1,
     },
