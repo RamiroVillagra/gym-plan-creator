@@ -53,7 +53,7 @@ function PageLoader() {
 function ProtectedRoutes() {
   const { user, role, loading } = useAuth();
 
-  if (loading || (user && role === null)) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Cargando...</p>
