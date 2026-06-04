@@ -8,7 +8,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 const coachNav = [
   { to: "/", label: "Dashboard", icon: Dumbbell },
   { to: "/exercises", label: "Ejercicios", icon: ListChecks },
-  { to: "/clients", label: "Clientes", icon: Users },
+  { to: "/clients", label: "Alumnos", icon: Users },
   { to: "/routines", label: "Rutinas", icon: ClipboardList },
   { to: "/calendar", label: "Calendario", icon: CalendarDays },
   { to: "/groups", label: "Grupos", icon: UsersRound },

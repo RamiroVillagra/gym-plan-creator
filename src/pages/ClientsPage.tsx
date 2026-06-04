@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format, addDays, addWeeks, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -46,6 +46,13 @@ export default function ClientsPage() {
   const [infoClient, setInfoClient] = useState<any>(null);
   const [infoText, setInfoText] = useState("");
 
+  // Edit client dialog
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+
   const updateInfo = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
       const { error } = await supabase.from("clients").update({ notes: notes || null }).eq("id", id);
@@ -57,6 +64,32 @@ export default function ClientsPage() {
       toast.success("Información guardada");
     },
     onError: () => toast.error("Error al guardar"),
+  });
+
+  const updateClient = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("clients").update({
+        name: editName.trim(),
+        email: editEmail.trim() || null,
+        phone: editPhone.trim() || null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      // Actualizar también el alumno seleccionado si es el mismo
+      if (selectedClient?.id === editId) {
+        setSelectedClient((prev: any) => ({
+          ...prev,
+          name: editName.trim(),
+          email: editEmail.trim() || null,
+          phone: editPhone.trim() || null,
+        }));
+      }
+      setEditOpen(false);
+      toast.success("Datos actualizados");
+    },
+    onError: () => toast.error("Error al actualizar"),
   });
 
   // View routine detail
@@ -131,9 +164,9 @@ export default function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ["clients-count"] });
       setName(""); setEmail(""); setPhone(""); setNotes("");
       setOpen(false);
-      toast.success("Cliente registrado");
+      toast.success("Alumno registrado");
     },
-    onError: () => toast.error("Error al registrar cliente"),
+    onError: () => toast.error("Error al registrar alumno"),
   });
 
   const deleteMutation = useMutation({
@@ -145,7 +178,7 @@ export default function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-count"] });
       setSelectedClient(null);
-      toast.success("Cliente eliminado");
+      toast.success("Alumno eliminado");
     },
   });
 
@@ -273,7 +306,7 @@ export default function ClientsPage() {
     return (
       <div className="animate-fade-in">
         <Button variant="ghost" className="mb-4" onClick={() => setSelectedClient(null)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />Volver a Clientes
+          <ArrowLeft className="h-4 w-4 mr-2" />Volver a Alumnos
         </Button>
 
         <div className="flex items-center justify-between mb-6">
@@ -284,9 +317,20 @@ export default function ClientsPage() {
               {selectedClient.phone && <span>{selectedClient.phone}</span>}
             </div>
           </div>
-          <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(selectedClient.id)}>
-            <Trash2 className="h-4 w-4 mr-2" />Eliminar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => {
+              setEditId(selectedClient.id);
+              setEditName(selectedClient.name);
+              setEditEmail(selectedClient.email || "");
+              setEditPhone(selectedClient.phone || "");
+              setEditOpen(true);
+            }}>
+              <Pencil className="h-4 w-4 mr-2" />Editar
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(selectedClient.id)}>
+              <Trash2 className="h-4 w-4 mr-2" />Eliminar
+            </Button>
+          </div>
         </div>
 
         {/* Quick actions */}
@@ -501,15 +545,15 @@ export default function ClientsPage() {
     <div className="animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-heading font-bold">Clientes</h1>
+          <h1 className="text-3xl font-heading font-bold">Alumnos</h1>
           <p className="text-muted-foreground">Gestiona tus alumnos</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Nuevo Cliente</Button>
+            <Button><Plus className="h-4 w-4 mr-2" />Nuevo Alumno</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Registrar Cliente</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Registrar Alumno</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               <Input placeholder="Nombre *" value={name} onChange={e => setName(e.target.value)} />
               <Input placeholder="Email (opcional)" value={email} onChange={e => setEmail(e.target.value)} />
@@ -523,14 +567,14 @@ export default function ClientsPage() {
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar clientes..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder="Buscar alumnos..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
       {isLoading ? (
         <p className="text-muted-foreground">Cargando...</p>
       ) : !filtered?.length ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No hay clientes{search ? " que coincidan" : ""}.</p>
+          <p>No hay alumnos{search ? " que coincidan" : ""}.</p>
         </div>
       ) : (
         <div className="grid gap-2">
@@ -565,11 +609,47 @@ export default function ClientsPage() {
                   <Info className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <span className="text-xs text-muted-foreground">→</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setEditId(client.id);
+                    setEditName(client.name);
+                    setEditEmail(client.email || "");
+                    setEditPhone(client.phone || "");
+                    setEditOpen(true);
+                  }}
+                  title="Editar alumno"
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <span className="text-xs text-muted-foreground">→</span>
+              </div>
             </button>
           ))}
         </div>
       )}
+
+      {/* Edit client dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar Alumno</DialogTitle></DialogHeader>
+          <div className="space-y-4 mt-4">
+            <Input placeholder="Nombre *" value={editName} onChange={e => setEditName(e.target.value)} />
+            <Input placeholder="Email (opcional)" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
+            <Input placeholder="Teléfono (opcional)" value={editPhone} onChange={e => setEditPhone(e.target.value)} />
+            <Button
+              className="w-full"
+              onClick={() => updateClient.mutate()}
+              disabled={!editName.trim() || updateClient.isPending}
+            >
+              {updateClient.isPending ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Info dialog */}
       <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
         <DialogContent>
