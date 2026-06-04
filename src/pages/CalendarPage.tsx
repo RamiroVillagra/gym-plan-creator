@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, isSameMonth, isSameDay, subMonths, subWeeks
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2, Zap, Battery, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CalendarDays, Pencil, Copy, Search, X, MessageSquare, Save, Undo2, Zap, Battery, Info, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -167,6 +167,23 @@ export default function CalendarPage() {
         .order("workout_date");
       if (error) throw error;
       return data;
+    },
+  });
+
+  // IDs de los workouts visibles en el rango actual
+  const visibleWorkoutIds = useMemo(() => workouts?.map((w: any) => w.id) ?? [], [workouts]);
+
+  // Qué workouts ya fueron registrados desde kiosco o vista alumno
+  const { data: loggedWorkoutIds } = useQuery({
+    queryKey: ["calendar-logged", visibleWorkoutIds],
+    enabled: visibleWorkoutIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("workout_logs")
+        .select("assigned_workout_id")
+        .in("assigned_workout_id", visibleWorkoutIds)
+        .eq("completed", true);
+      return new Set<string>(data?.map((l: any) => l.assigned_workout_id) ?? []);
     },
   });
 
@@ -818,6 +835,7 @@ export default function CalendarPage() {
         <DayView
           date={currentDate}
           workouts={workouts?.filter((w: any) => w.workout_date === format(currentDate, "yyyy-MM-dd")) ?? []}
+          loggedWorkoutIds={loggedWorkoutIds}
           role={role}
           isClientFiltered={isClientFiltered}
           onAdd={() => {
@@ -934,6 +952,9 @@ export default function CalendarPage() {
                                   : w.clients?.name
                                 }
                               </span>
+                              {loggedWorkoutIds?.has(w.id) && (
+                                <CheckCircle2 className="h-2.5 w-2.5 text-primary shrink-0" title="Sesión registrada" />
+                              )}
                               {w.notes && (
                                 <MessageSquare className="h-2.5 w-2.5 text-primary shrink-0" />
                               )}
@@ -1536,8 +1557,8 @@ export default function CalendarPage() {
   );
 }
 
-function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
-  date: Date; workouts: any[]; role: string | null; isClientFiltered: boolean;
+function DayView({ date, workouts, loggedWorkoutIds, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
+  date: Date; workouts: any[]; loggedWorkoutIds?: Set<string>; role: string | null; isClientFiltered: boolean;
   onAdd: () => void; onDelete: (id: string) => void; onEdit: (w: any) => void; onViewDetail: (w: any) => void;
   onSaveDay: () => void; isSavingDay: boolean;
 }) {
@@ -1564,6 +1585,9 @@ function DayView({ date, workouts, role, isClientFiltered, onAdd, onDelete, onEd
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-foreground">{w.clients?.name}</p>
+                  {loggedWorkoutIds?.has(w.id) && (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" title="Sesión registrada" />
+                  )}
                   {w.notes && (
                     <MessageSquare className="h-3.5 w-3.5 text-primary shrink-0" />
                   )}
