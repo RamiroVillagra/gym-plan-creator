@@ -367,9 +367,10 @@ export default function KioskPage() {
 
   const logAllSets = useMutation({
     mutationFn: async () => {
-      // Agrupar por ejercicio para saber sets reales
+      // Solo incluir ejercicios donde se modificó algo respecto al plan
       const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number }[] }> = {};
       for (const [key, card] of cardRefs.current) {
+        if (!card.hasModifications()) continue;
         const sets = card.getSets();
         byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
       }
@@ -1081,6 +1082,12 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     })
   );
 
+  // Estado local para marcar círculos como confirmados visualmente
+  // (independientemente de si se guardó en DB o no)
+  const [confirmedSets, setConfirmedSets] = useState<Set<number>>(
+    new Set(existingLogs.filter((l: any) => l.completed).map((l: any) => l.set_number as number))
+  );
+
   useImperativeHandle(ref, () => ({
     assignedWorkoutId,
     exerciseId,
@@ -1089,6 +1096,14 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
       reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
       weight_used: parseFloat(s.weight) || allSets[i]?.targetWeight || 0,
     })),
+    // True si algún valor difiere del plan — solo entonces se guarda en workout_logs
+    hasModifications: () => localSets.some((s, i) => {
+      const plannedReps   = allSets[i]?.targetReps   ?? 0;
+      const plannedWeight = allSets[i]?.targetWeight  ?? 0;
+      const currentReps   = parseInt(s.reps)          || plannedReps;
+      const currentWeight = parseFloat(s.weight)      || plannedWeight;
+      return currentReps !== plannedReps || currentWeight !== plannedWeight;
+    }),
   }));
 
   return (
@@ -1122,7 +1137,8 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
           <span className="w-20 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">{unit}</span>
         </div>
         {localSets.map((s, i) => {
-          const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
+          // El círculo se muestra verde si fue confirmado localmente o ya tenía log guardado
+          const isLogged = confirmedSets.has(i + 1) || existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
           return (
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
@@ -1130,10 +1146,17 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
                 onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, reps: val } : s2)); }} />
               <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
                 onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, weight: val } : s2)); }} />
-              <button onClick={() => onLogSet({
-                assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId,
-                set_number: i + 1, reps_done: parseInt(s.reps) || 0, weight_used: parseFloat(s.weight) || 0,
-              })}>
+              <button onClick={() => {
+                const reps_done   = parseInt(s.reps)   || allSets[i]?.targetReps   || 0;
+                const weight_used = parseFloat(s.weight) || allSets[i]?.targetWeight || 0;
+                // Siempre marcar el círculo verde visualmente
+                setConfirmedSets(prev => new Set([...prev, i + 1]));
+                // Solo guardar en DB si los valores difieren del plan
+                const isModified = reps_done !== (allSets[i]?.targetReps ?? 0) || weight_used !== (allSets[i]?.targetWeight ?? 0);
+                if (isModified) {
+                  onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
+                }
+              }}>
                 {isLogged ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground hover:text-primary" />}
               </button>
             </div>

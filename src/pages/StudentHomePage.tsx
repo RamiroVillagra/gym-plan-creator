@@ -359,6 +359,8 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     mutationFn: async () => {
       const rows: any[] = [];
       for (const [, card] of cardRefs.current) {
+        // Solo guardar ejercicios donde el alumno modificó algo respecto al plan
+        if (!card.hasModifications()) continue;
         const sets = card.getSets();
         for (const s of sets) {
           rows.push({
@@ -544,6 +546,14 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
       weight_used: parseFloat(s.weightDone) || allSets[i]?.targetWeight || 0,
     })),
+    // True si algún valor difiere del plan — solo entonces se guarda en workout_logs
+    hasModifications: () => localSets.some((s, i) => {
+      const plannedReps   = allSets[i]?.targetReps   ?? 0;
+      const plannedWeight = allSets[i]?.targetWeight  ?? 0;
+      const currentReps   = parseInt(s.reps)          || plannedReps;
+      const currentWeight = parseFloat(s.weightDone)  || plannedWeight;
+      return currentReps !== plannedReps || currentWeight !== plannedWeight;
+    }),
   }));
 
   return (
