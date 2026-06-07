@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -132,23 +132,6 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
   const hasOverrides = isOverrideMode && overrideExercises && overrideExercises.length > 0;
   const routineExercises = hasOverrides ? overrideExercises : baseExercises;
-
-  // Mapa del plan original (routine_exercises) por exercise_id + day_number
-  // Se usa para mostrar los valores anteriores cuando hay overrides que los modificaron
-  const basePlanMap = useMemo(() => {
-    if (!hasOverrides || !baseExercises?.length) return null;
-    const map = new Map<string, { sets: number; reps: number; weight: number | null; unit: string | null; set_groups: any }>();
-    for (const re of baseExercises) {
-      map.set(`${re.exercise_id}__${re.day_number ?? 1}`, {
-        sets: re.sets,
-        reps: re.reps,
-        weight: re.weight,
-        unit: re.unit,
-        set_groups: re.set_groups,
-      });
-    }
-    return map;
-  }, [hasOverrides, baseExercises]);
 
   const ensureOverrides = useCallback(async () => {
     if (!isOverrideMode || hasOverrides) return;
@@ -790,25 +773,6 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               {re.notes && (
                                 <p className="text-[10px] text-amber-500 mt-0.5 italic">💬 {re.notes}</p>
                               )}
-                              {(() => {
-                                // Mostrar plan base si fue sobreescrito por kiosco/alumno
-                                if (!basePlanMap) return null;
-                                const base = basePlanMap.get(`${re.exercise_id}__${re.day_number ?? 1}`);
-                                if (!base) return null;
-                                const changed =
-                                  base.sets !== re.sets ||
-                                  base.reps !== re.reps ||
-                                  base.weight !== re.weight;
-                                if (!changed) return null;
-                                const baseStr = base.set_groups?.length
-                                  ? base.set_groups.map((g: any) => `${g.sets}×${g.reps}${g.weight ? `@${g.weight}${base.unit ?? "kg"}` : ""}`).join(" / ")
-                                  : `${base.sets}×${base.reps}${base.weight ? ` @ ${base.weight}${base.unit ?? "kg"}` : ""}`;
-                                return (
-                                  <p className="text-[10px] text-muted-foreground/60 mt-0.5 line-through" title="Plan original antes de la sesión">
-                                    {baseStr}
-                                  </p>
-                                );
-                              })()}
                               {maxWeights[re.exercise_id] !== undefined && (
                                 <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-400 mt-0.5">
                                   <Trophy className="h-2.5 w-2.5" />
