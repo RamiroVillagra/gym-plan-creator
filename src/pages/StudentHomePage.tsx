@@ -379,11 +379,17 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
         );
         if (error) throw error;
       }
+      return rows.length > 0; // false = plan seguido sin cambios
     },
-    onSuccess: () => {
-      refetchLogs();
-      onSaved();
-      toast.success("¡Sesión guardada!");
+    onSuccess: (hadChanges) => {
+      // #8/#9: solo refetch e invalidar cuando realmente se guardó algo
+      if (hadChanges) {
+        refetchLogs();
+        onSaved();
+        toast.success("¡Sesión guardada!");
+      } else {
+        toast.info("Entrenamiento confirmado — sin cambios respecto al plan");
+      }
     },
     onError: () => toast.error("Error al guardar"),
   });
@@ -541,17 +547,25 @@ const ExerciseCard = forwardRef(function ExerciseCard({
 
   useImperativeHandle(ref, () => ({
     exerciseId,
-    getSets: () => localSets.map((s, i) => ({
-      set_number: i + 1,
-      reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
-      weight_used: parseFloat(s.weightDone) || allSets[i]?.targetWeight || 0,
-    })),
+    getSets: () => localSets.map((s, i) => {
+      // #1: isNaN en lugar de || para que 0 sea un valor válido
+      const pReps   = parseInt(s.reps);
+      const pWeight = parseFloat(s.weightDone);
+      return {
+        set_number:   i + 1,
+        reps_done:    isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps,
+        weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
+      };
+    }),
     // True si algún valor difiere del plan — solo entonces se guarda en workout_logs
     hasModifications: () => localSets.some((s, i) => {
       const plannedReps   = allSets[i]?.targetReps   ?? 0;
       const plannedWeight = allSets[i]?.targetWeight  ?? 0;
-      const currentReps   = parseInt(s.reps)          || plannedReps;
-      const currentWeight = parseFloat(s.weightDone)  || plannedWeight;
+      // #1: isNaN para no confundir 0 con "campo vacío"
+      const pReps   = parseInt(s.reps);
+      const pWeight = parseFloat(s.weightDone);
+      const currentReps   = isNaN(pReps)   ? plannedReps   : pReps;
+      const currentWeight = isNaN(pWeight) ? plannedWeight : pWeight;
       return currentReps !== plannedReps || currentWeight !== plannedWeight;
     }),
   }));
@@ -635,12 +649,17 @@ const ExerciseCard = forwardRef(function ExerciseCard({
                 value={s.weightDone}
                 onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
               />
-              <button onClick={() => onLogSet({
-                exercise_id: exerciseId,
-                set_number: i + 1,
-                reps_done: parseInt(s.reps) || 0,
-                weight_used: parseFloat(s.weightDone) || 0,
-              })}>
+              <button onClick={() => {
+                // #1: isNaN para que 0 sea un valor registrable
+                const pReps   = parseInt(s.reps);
+                const pWeight = parseFloat(s.weightDone);
+                onLogSet({
+                  exercise_id: exerciseId,
+                  set_number:  i + 1,
+                  reps_done:   isNaN(pReps)   ? 0 : pReps,
+                  weight_used: isNaN(pWeight) ? 0 : pWeight,
+                });
+              }}>
                 {isLogged
                   ? <CheckCircle2 className="h-7 w-7 text-primary" />
                   : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />

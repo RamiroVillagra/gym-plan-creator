@@ -360,6 +360,7 @@ export default function KioskPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-logged"] }); // #7: refrescar ícono calendario
       toast.success("Serie registrada");
     },
     onError: () => toast.error("Error al registrar la serie"),
@@ -374,6 +375,9 @@ export default function KioskPage() {
         const sets = card.getSets();
         byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
       }
+
+      // #4: Si no hay ejercicios modificados, salir limpiamente sin tocar la DB
+      if (!Object.keys(byExercise).length) return false;
 
       // 1. Guardar workout_logs
       const logRows: any[] = [];
@@ -415,7 +419,8 @@ export default function KioskPage() {
       await Promise.all(exerciseEntries.map(async ({ assignedWorkoutId, exerciseId, sets: exerciseSets }) => {
         const totalSets = exerciseSets.length;
         const reps = exerciseSets[0]?.reps_done ?? 0;
-        const weight = exerciseSets[0]?.weight_used ?? 0;
+        // #6: usar el peso máximo registrado (no solo el de la serie 1)
+        const weight = exerciseSets.reduce((max, s) => Math.max(max, s.weight_used), 0);
         const existingId = existingMap.get(`${assignedWorkoutId}__${exerciseId}`);
 
         if (existingId) {
@@ -434,12 +439,20 @@ export default function KioskPage() {
           if (error) throw error;
         }
       }));
+
+      return true;
     },
-    onSuccess: () => {
+    onSuccess: (hadChanges) => {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
       queryClient.invalidateQueries({ queryKey: ["kiosk-assigned-exercises"] });
       queryClient.invalidateQueries({ queryKey: ["exercise-history"] });
-      toast.success("¡Sesión guardada completa!");
+      queryClient.invalidateQueries({ queryKey: ["calendar-logged"] }); // #7
+      // #5: toast diferenciado según si hubo cambios reales
+      if (hadChanges) {
+        toast.success("¡Sesión guardada completa!");
+      } else {
+        toast.info("Entrenamiento confirmado — sin cambios respecto al plan");
+      }
     },
     onError: () => toast.error("Error al guardar la sesión"),
   });
@@ -651,6 +664,7 @@ export default function KioskPage() {
                               (l: any) => l.exercise_id === re.exercise_id && l.assigned_workout_id === workout.id
                             ) ?? []}
                             onLogSet={logSet.mutate}
+                            isLoggingSet={logSet.isPending}
                           />
                         ))}
                       </div>
@@ -1058,13 +1072,14 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const KioskExerciseCard = forwardRef(function KioskExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, assignedWorkoutId, exerciseId, existingLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, assignedWorkoutId, exerciseId, existingLogs, onLogSet, isLoggingSet,
 }: {
   exercise: any; sets: number | null; reps: number | null; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   coachNotes?: string | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
   onLogSet: (params: any) => void;
+  isLoggingSet?: boolean; // #2: para deshabilitar círculos mientras se guarda
 }, ref: any) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   // Expandir set_groups en filas individuales de series
@@ -1091,17 +1106,25 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   useImperativeHandle(ref, () => ({
     assignedWorkoutId,
     exerciseId,
-    getSets: () => localSets.map((s, i) => ({
-      set_number: i + 1,
-      reps_done: parseInt(s.reps) || allSets[i]?.targetReps || 0,
-      weight_used: parseFloat(s.weight) || allSets[i]?.targetWeight || 0,
-    })),
+    getSets: () => localSets.map((s, i) => {
+      // #1: isNaN en lugar de || para que 0 sea un valor válido
+      const pReps   = parseInt(s.reps);
+      const pWeight = parseFloat(s.weight);
+      return {
+        set_number:   i + 1,
+        reps_done:    isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps,
+        weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
+      };
+    }),
     // True si algún valor difiere del plan — solo entonces se guarda en workout_logs
     hasModifications: () => localSets.some((s, i) => {
       const plannedReps   = allSets[i]?.targetReps   ?? 0;
       const plannedWeight = allSets[i]?.targetWeight  ?? 0;
-      const currentReps   = parseInt(s.reps)          || plannedReps;
-      const currentWeight = parseFloat(s.weight)      || plannedWeight;
+      // #1: isNaN para no confundir 0 con "campo vacío"
+      const pReps   = parseInt(s.reps);
+      const pWeight = parseFloat(s.weight);
+      const currentReps   = isNaN(pReps)   ? plannedReps   : pReps;
+      const currentWeight = isNaN(pWeight) ? plannedWeight : pWeight;
       return currentReps !== plannedReps || currentWeight !== plannedWeight;
     }),
   }));
@@ -1146,18 +1169,24 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
                 onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, reps: val } : s2)); }} />
               <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
                 onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, weight: val } : s2)); }} />
-              <button onClick={() => {
-                const reps_done   = parseInt(s.reps)   || allSets[i]?.targetReps   || 0;
-                const weight_used = parseFloat(s.weight) || allSets[i]?.targetWeight || 0;
-                // Siempre marcar el círculo verde visualmente
-                setConfirmedSets(prev => new Set([...prev, i + 1]));
-                // Solo guardar en DB si los valores difieren del plan
-                const isModified = reps_done !== (allSets[i]?.targetReps ?? 0) || weight_used !== (allSets[i]?.targetWeight ?? 0);
-                if (isModified) {
-                  onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
-                }
-              }}>
-                {isLogged ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className="h-5 w-5 text-muted-foreground hover:text-primary" />}
+              <button
+                disabled={isLoggingSet} // #2: evitar doble-tap mientras se guarda
+                onClick={() => {
+                  // #1: isNaN para que 0 sea un valor registrable
+                  const pReps   = parseInt(s.reps);
+                  const pWeight = parseFloat(s.weight);
+                  const reps_done   = isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps;
+                  const weight_used = isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight;
+                  // Siempre marcar el círculo verde visualmente
+                  setConfirmedSets(prev => new Set([...prev, i + 1]));
+                  // Solo guardar en DB si los valores difieren del plan
+                  const isModified = reps_done !== (allSets[i]?.targetReps ?? 0) || weight_used !== (allSets[i]?.targetWeight ?? 0);
+                  if (isModified) {
+                    onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
+                  }
+                }}
+              >
+                {isLogged ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className={`h-5 w-5 ${isLoggingSet ? "text-muted-foreground/40" : "text-muted-foreground hover:text-primary"}`} />}
               </button>
             </div>
           );
