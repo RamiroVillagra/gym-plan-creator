@@ -732,6 +732,23 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               className="text-left flex-1"
                               onClick={() => {
                                 if (!editable) return;
+                                // Si tiene series fraccionadas activas, abrir ese editor directamente
+                                if (re.set_groups?.length) {
+                                  if (editingGroupsId === re.id) {
+                                    setEditingGroupsId(null);
+                                  } else {
+                                    setEditingGroups(
+                                      re.set_groups.map((g: any) => ({
+                                        sets: String(g.sets),
+                                        reps: String(g.reps),
+                                        weight: g.weight != null ? String(g.weight) : "",
+                                      }))
+                                    );
+                                    setEditingGroupsId(re.id);
+                                  }
+                                  return;
+                                }
+                                // Sin series fraccionadas → editor normal
                                 setEditingId(re.id);
                                 setEditSets(String(re.sets));
                                 setEditReps(String(re.reps));
