@@ -2,7 +2,10 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
-type UserRole = "coach" | "student" | null;
+// undefined  = role not fetched yet (fetch in flight)
+// null       = fetched but user has no entry in user_roles
+// "coach" | "student" = fetched, role known
+type UserRole = "coach" | "student" | null | undefined;
 
 interface AuthContextType {
   user: User | null;
@@ -13,7 +16,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null, session: null, role: null, loading: true, signOut: async () => {},
+  user: null, session: null, role: undefined, loading: true, signOut: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -21,7 +24,7 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<UserRole>(null);
+  const [role, setRole] = useState<UserRole>(undefined);
   const [loading, setLoading] = useState(true);
 
   const fetchRole = async (userId: string) => {
@@ -31,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq("user_id", userId)
       .limit(1)
       .maybeSingle();
-    setRole((data?.role as UserRole) ?? null);
+    setRole((data?.role as "coach" | "student") ?? null);
     setLoading(false);
   };
 
@@ -41,8 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
-          // Use setTimeout to avoid Supabase client deadlock
-          // loading stays true until fetchRole completes
+          // Reset role to undefined so ProtectedRoutes shows spinner
+          // while the DB fetch is in flight — prevents coach dashboard flash
+          setRole(undefined);
           setTimeout(() => fetchRole(session.user.id), 0);
         } else {
           setRole(null);

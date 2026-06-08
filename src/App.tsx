@@ -53,7 +53,10 @@ function PageLoader() {
 function ProtectedRoutes() {
   const { user, role, loading } = useAuth();
 
-  if (loading) {
+  // Show spinner while initial load OR while role is still being fetched
+  // (role === undefined means the DB fetch is in flight — prevents flashing
+  // the coach dashboard before the student role is confirmed)
+  if (loading || (user && role === undefined)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Cargando...</p>
