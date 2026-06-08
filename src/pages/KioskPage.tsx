@@ -1097,6 +1097,9 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     })
   );
 
+  // Snapshot del estado inicial para detectar si el entrenador cambió algo
+  const initialSetsRef = useRef(localSets);
+
   // Estado local para marcar círculos como confirmados visualmente
   // (independientemente de si se guardó en DB o no)
   const [confirmedSets, setConfirmedSets] = useState<Set<number>>(
@@ -1107,7 +1110,6 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     assignedWorkoutId,
     exerciseId,
     getSets: () => localSets.map((s, i) => {
-      // #1: isNaN en lugar de || para que 0 sea un valor válido
       const pReps   = parseInt(s.reps);
       const pWeight = parseFloat(s.weight);
       return {
@@ -1116,17 +1118,11 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
       };
     }),
-    // True si algún valor difiere del plan — solo entonces se guarda en workout_logs
-    hasModifications: () => localSets.some((s, i) => {
-      const plannedReps   = allSets[i]?.targetReps   ?? 0;
-      const plannedWeight = allSets[i]?.targetWeight  ?? 0;
-      // #1: isNaN para no confundir 0 con "campo vacío"
-      const pReps   = parseInt(s.reps);
-      const pWeight = parseFloat(s.weight);
-      const currentReps   = isNaN(pReps)   ? plannedReps   : pReps;
-      const currentWeight = isNaN(pWeight) ? plannedWeight : pWeight;
-      return currentReps !== plannedReps || currentWeight !== plannedWeight;
-    }),
+    // True solo si el entrenador cambió algo respecto a lo que estaba pre-relleno al abrir
+    hasModifications: () => localSets.some((s, i) =>
+      s.reps    !== initialSetsRef.current[i]?.reps ||
+      s.weight  !== initialSetsRef.current[i]?.weight
+    ),
   }));
 
   return (
