@@ -173,17 +173,83 @@ export default function CalendarPage() {
   // IDs de los workouts visibles en el rango actual
   const visibleWorkoutIds = useMemo(() => workouts?.map((w: any) => w.id) ?? [], [workouts]);
 
-  // Qué workouts ya fueron registrados desde kiosco o vista alumno
+  // Workouts donde el alumno/entrenador modificó al menos un valor respecto al plan
+  // Se compara workout_logs contra routine_exercises (nunca mutado) para detectar cambios reales
   const { data: loggedWorkoutIds } = useQuery({
     queryKey: ["calendar-logged", visibleWorkoutIds],
     enabled: visibleWorkoutIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("workout_logs")
-        .select("assigned_workout_id")
-        .in("assigned_workout_id", visibleWorkoutIds)
-        .eq("completed", true);
-      return new Set<string>(data?.map((l: any) => l.assigned_workout_id) ?? []);
+      if (!visibleWorkoutIds.length) return new Set<string>();
+
+      // Paso 1: logs y overrides en paralelo
+      const [logsResult, overridesResult] = await Promise.all([
+        supabase
+          .from("workout_logs")
+          .select("assigned_workout_id, exercise_id, reps_done, weight_used")
+          .in("assigned_workout_id", visibleWorkoutIds)
+          .eq("completed", true),
+        supabase
+          .from("assigned_workout_exercises")
+          .select("assigned_workout_id, exercise_id, reps, weight")
+          .in("assigned_workout_id", visibleWorkoutIds),
+      ]);
+
+      const logs = logsResult.data ?? [];
+      if (!logs.length) return new Set<string>();
+
+      // Mapa de overrides del coach (si editó este workout manualmente)
+      const overrideMap = new Map<string, { reps: number | null; weight: number | null }>();
+      for (const o of (overridesResult.data ?? [])) {
+        overrideMap.set(`${o.assigned_workout_id}__${o.exercise_id}`, { reps: o.reps, weight: o.weight });
+      }
+
+      // Paso 2: plan base (routine_exercises) para workouts sin override del coach
+      const routineIds = [...new Set(
+        (workouts ?? []).filter((w: any) => w.routine_id).map((w: any) => w.routine_id)
+      )];
+      const baseMap = new Map<string, { reps: number | null; weight: number | null }>();
+
+      if (routineIds.length) {
+        const { data: baseExercises } = await supabase
+          .from("routine_exercises")
+          .select("routine_id, exercise_id, reps, weight, day_number")
+          .in("routine_id", routineIds);
+
+        for (const w of workouts ?? [] as any[]) {
+          if (!w.routine_id) continue;
+          for (const re of (baseExercises ?? []).filter((re: any) =>
+            re.routine_id === w.routine_id && (re.day_number ?? 1) === (w.day_number ?? 1)
+          )) {
+            const key = `${w.id}__${re.exercise_id}`;
+            // Solo usar base si el coach no creó un override para este ejercicio
+            if (!overrideMap.has(key)) {
+              baseMap.set(key, { reps: re.reps, weight: re.weight });
+            }
+          }
+        }
+      }
+
+      // Paso 3: comparar logs contra plan — icon solo si algo difiere
+      const modifiedIds = new Set<string>();
+      for (const log of logs) {
+        const key = `${log.assigned_workout_id}__${log.exercise_id}`;
+        const plan = overrideMap.get(key) ?? baseMap.get(key);
+
+        if (!plan) {
+          // Sin plan (workout libre o set_groups complejos) → asumir modificado
+          modifiedIds.add(log.assigned_workout_id);
+          continue;
+        }
+
+        const repsDiff   = (log.reps_done   ?? 0) !== (plan.reps    ?? 0);
+        const weightDiff = (log.weight_used ?? 0) !== (plan.weight  ?? 0);
+
+        if (repsDiff || weightDiff) {
+          modifiedIds.add(log.assigned_workout_id);
+        }
+      }
+
+      return modifiedIds;
     },
   });
 

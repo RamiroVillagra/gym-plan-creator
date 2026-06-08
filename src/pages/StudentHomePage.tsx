@@ -357,10 +357,12 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
 
   const saveAllSets = useMutation({
     mutationFn: async () => {
+      // Detectar modificaciones para el toast
+      const hasAnyModification = [...cardRefs.current.values()].some(card => card.hasModifications());
+
+      // Guardar TODOS los ejercicios (no solo los modificados)
       const rows: any[] = [];
       for (const [, card] of cardRefs.current) {
-        // Solo guardar ejercicios donde el alumno modificó algo respecto al plan
-        if (!card.hasModifications()) continue;
         const sets = card.getSets();
         for (const s of sets) {
           rows.push({
@@ -379,13 +381,12 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
         );
         if (error) throw error;
       }
-      return rows.length > 0; // false = plan seguido sin cambios
+      return hasAnyModification;
     },
     onSuccess: (hadChanges) => {
-      // #8/#9: solo refetch e invalidar cuando realmente se guardó algo
+      refetchLogs();
+      onSaved();
       if (hadChanges) {
-        refetchLogs();
-        onSaved();
         toast.success("¡Sesión guardada!");
       } else {
         toast.info("Entrenamiento confirmado — sin cambios respecto al plan");

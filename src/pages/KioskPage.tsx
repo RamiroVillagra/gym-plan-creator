@@ -368,18 +368,19 @@ export default function KioskPage() {
 
   const logAllSets = useMutation({
     mutationFn: async () => {
-      // Solo incluir ejercicios donde se modificó algo respecto al plan
+      // Detectar modificaciones para el toast (antes de iterar)
+      const hasAnyModification = [...cardRefs.current.values()].some(card => card.hasModifications());
+
+      // Incluir TODOS los ejercicios (no solo los modificados)
       const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number }[] }> = {};
       for (const [key, card] of cardRefs.current) {
-        if (!card.hasModifications()) continue;
         const sets = card.getSets();
         byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
       }
 
-      // #4: Si no hay ejercicios modificados, salir limpiamente sin tocar la DB
       if (!Object.keys(byExercise).length) return false;
 
-      // 1. Guardar workout_logs
+      // 1. Guardar workout_logs para TODOS los ejercicios
       const logRows: any[] = [];
       for (const { assignedWorkoutId, exerciseId, sets } of Object.values(byExercise)) {
         for (const s of sets) {
@@ -400,11 +401,12 @@ export default function KioskPage() {
         if (logError) throw logError;
       }
 
-      // 2. Actualizar assigned_workout_exercises con los valores registrados
+      // 2. Actualizar SOLO el conteo de series en assigned_workout_exercises
+      // No se sobreescriben reps/weight para preservar el plan original del coach
+      // y permitir que CalendarPage compare correctamente los valores
       const exerciseEntries = Object.values(byExercise);
       const allWorkoutIds = [...new Set(exerciseEntries.map(e => e.assignedWorkoutId))];
 
-      // Una sola query para traer todos los registros existentes
       const { data: existingRows, error: selectError } = await supabase
         .from("assigned_workout_exercises")
         .select("id, exercise_id, assigned_workout_id")
@@ -415,32 +417,21 @@ export default function KioskPage() {
         (existingRows ?? []).map(r => [`${r.assigned_workout_id}__${r.exercise_id}`, r.id])
       );
 
-      // Actualizar/insertar en paralelo con manejo de errores
+      // Solo actualizar sets count en overrides que ya existen (creados por el coach)
+      // No insertar nuevas entradas — routine_exercises es la fuente de verdad del plan
       await Promise.all(exerciseEntries.map(async ({ assignedWorkoutId, exerciseId, sets: exerciseSets }) => {
         const totalSets = exerciseSets.length;
-        const reps = exerciseSets[0]?.reps_done ?? 0;
-        // #6: usar el peso máximo registrado (no solo el de la serie 1)
-        const weight = exerciseSets.reduce((max, s) => Math.max(max, s.weight_used), 0);
         const existingId = existingMap.get(`${assignedWorkoutId}__${exerciseId}`);
-
         if (existingId) {
           const { error } = await supabase.from("assigned_workout_exercises")
-            .update({ sets: totalSets, reps, weight })
+            .update({ sets: totalSets })
             .eq("id", existingId);
           if (error) throw error;
-        } else {
-          const { error } = await supabase.from("assigned_workout_exercises").insert({
-            assigned_workout_id: assignedWorkoutId,
-            exercise_id: exerciseId,
-            sets: totalSets,
-            reps,
-            weight,
-          });
-          if (error) throw error;
         }
+        // No insert — el plan base vive en routine_exercises
       }));
 
-      return true;
+      return hasAnyModification;
     },
     onSuccess: (hadChanges) => {
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
@@ -1166,20 +1157,16 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
               <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
                 onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, weight: val } : s2)); }} />
               <button
-                disabled={isLoggingSet} // #2: evitar doble-tap mientras se guarda
+                disabled={isLoggingSet}
                 onClick={() => {
-                  // #1: isNaN para que 0 sea un valor registrable
                   const pReps   = parseInt(s.reps);
                   const pWeight = parseFloat(s.weight);
                   const reps_done   = isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps;
                   const weight_used = isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight;
-                  // Siempre marcar el círculo verde visualmente
+                  // Marcar el círculo verde visualmente
                   setConfirmedSets(prev => new Set([...prev, i + 1]));
-                  // Solo guardar en DB si los valores difieren del plan
-                  const isModified = reps_done !== (allSets[i]?.targetReps ?? 0) || weight_used !== (allSets[i]?.targetWeight ?? 0);
-                  if (isModified) {
-                    onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
-                  }
+                  // Siempre guardar en DB (el ícono del calendario usa comparación vs plan)
+                  onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
                 }}
               >
                 {isLogged ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className={`h-5 w-5 ${isLoggingSet ? "text-muted-foreground/40" : "text-muted-foreground hover:text-primary"}`} />}
