@@ -687,6 +687,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               <Input type="number" className="w-14 h-7 text-xs" value={editReps} onChange={e => setEditReps(e.target.value)} placeholder="R" />
                               <span className="text-xs text-muted-foreground">@</span>
                               <Input type="number" className="w-16 h-7 text-xs" value={editWeight} onChange={e => setEditWeight(e.target.value)} placeholder="0" />
+                              {/* Primer input siempre es kg */}
+                              <span className="text-xs text-muted-foreground">kg</span>
                               <div className="flex rounded-md border border-input overflow-hidden h-7">
                                 {["kg", "seg", "m", "cm"].map(u => (
                                   <button key={u} type="button" onClick={() => setEditUnit(u)}
@@ -695,7 +697,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   </button>
                                 ))}
                               </div>
-                              {(editUnit === "m" || editUnit === "cm") && (
+                              {/* Segundo input solo para seg/m/cm — el primero (kg) no cambia */}
+                              {editUnit !== "kg" && (
                                 <>
                                   <span className="text-xs text-muted-foreground">×</span>
                                   <Input type="number" className="w-16 h-7 text-xs" value={editDistance} onChange={e => setEditDistance(e.target.value)} placeholder={editUnit} />
@@ -716,7 +719,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 reps: parseInt(editReps) || 1,
                                 weight: editWeight ? parseFloat(editWeight) : null,
                                 unit: editUnit,
-                                distance: (editUnit === "m" || editUnit === "cm") && editDistance ? parseFloat(editDistance) : null,
+                                distance: editUnit !== "kg" && editDistance ? parseFloat(editDistance) : null,
                                 notes: editNotes || null,
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
@@ -762,12 +765,12 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               {re.set_groups?.length ? (
                                 re.set_groups.map((g: any, i: number) => (
                                   <p key={i} className="text-[10px] text-muted-foreground">
-                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${re.unit ?? "kg"}` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
+                                    {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                   </p>
                                 ))
                               ) : (
                                 <p className="text-[10px] text-muted-foreground">
-                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}${re.unit ?? "kg"}` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
+                                  {re.sets}×{re.reps}{re.weight ? ` @ ${re.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}
                                 </p>
                               )}
                               {re.notes && (
