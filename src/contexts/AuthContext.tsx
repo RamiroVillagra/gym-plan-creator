@@ -39,16 +39,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // Track which user the current role belongs to, so background token
+    // refreshes for the same user don't re-trigger the loading spinner.
+    let currentUserId: string | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        // Always keep the session/user references fresh (refreshed tokens, etc.)
         setSession(session);
         setUser(session?.user ?? null);
+
+        const newUserId = session?.user?.id ?? null;
+
+        // TOKEN_REFRESHED / USER_UPDATED fire periodically while the app is open
+        // (Supabase auto-refreshes the access token, and again when a tab regains
+        // focus). These are NOT logins/logouts — the role hasn't changed. Resetting
+        // role to undefined here would flip ProtectedRoutes into its loading state,
+        // unmounting the active page (e.g. Kiosk mode) and wiping in-progress work.
+        // So for the same user we update the session silently and return early.
+        if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+          currentUserId = newUserId;
+          return;
+        }
+
         if (session?.user) {
-          // Reset role to undefined so ProtectedRoutes shows spinner
-          // while the DB fetch is in flight — prevents coach dashboard flash
-          setRole(undefined);
-          setTimeout(() => fetchRole(session.user.id), 0);
+          // Only show the spinner + refetch the role when the user actually changes.
+          if (newUserId !== currentUserId) {
+            currentUserId = newUserId;
+            setRole(undefined);
+            setTimeout(() => fetchRole(session.user.id), 0);
+          }
         } else {
+          currentUserId = null;
           setRole(null);
           setLoading(false);
         }
@@ -59,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        currentUserId = session.user.id;
         fetchRole(session.user.id);
       } else {
         setLoading(false);
