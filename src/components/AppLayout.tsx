@@ -19,7 +19,7 @@ const coachNav = [
 
 const studentNav = [
   { to: "/", label: "Mi Entrenamiento", shortLabel: "Entreno", icon: CalendarDays },
-  { to: "/stats", label: "Mi Progresión", shortLabel: "Progresión", icon: TrendingUp },
+  { to: "/stats", label: "Mi Progresión", shortLabel: "Progreso", icon: TrendingUp },
   { to: "/profile", label: "Mi Perfil", shortLabel: "Perfil", icon: UserCircle },
 ];
 
