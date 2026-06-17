@@ -514,24 +514,6 @@ export default function KioskPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allKioskClients.map(c => c.id).join(",")]);
 
-  const deleteAndReassign = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("assigned_workouts")
-        .delete()
-        .eq("client_id", selectedClient!)
-        .eq("workout_date", today);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["kiosk-workouts"] });
-      setPendingManualClient({ id: selectedClient!, name: selectedClientName });
-      setSearchOpen(true);
-      setSelectedClient(null);
-      setSelectedClientName("");
-    },
-    onError: () => toast.error("Error al cambiar el entrenamiento"),
-  });
-
   // --- Vista de entrenamiento del alumno ---
   if (selectedClient) {
     return (
@@ -610,13 +592,20 @@ export default function KioskPage() {
                     </h2>
                   ) : <span />}
                   <button
-                    onClick={() => deleteAndReassign.mutate()}
-                    disabled={deleteAndReassign.isPending}
+                    onClick={() => {
+                      // Abrir el selector SIN borrar el entrenamiento actual.
+                      // La reasignación (assignWorkoutToday) inserta el nuevo y recién
+                      // entonces borra el anterior. Si el usuario cancela, no se pierde nada.
+                      setPendingManualClient({ id: selectedClient!, name: selectedClientName });
+                      setSearchOpen(true);
+                      setSelectedClient(null);
+                      setSelectedClientName("");
+                    }}
                     title="Cambiar entrenamiento"
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-lg hover:bg-destructive/10"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    {deleteAndReassign.isPending ? "..." : "Cambiar día"}
+                    Cambiar día
                   </button>
                 </div>
                 {blocks.map((blockNum: number) => {
