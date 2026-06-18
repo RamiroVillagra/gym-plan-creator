@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Pencil, X, Search, Layers, ChevronUp, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 interface BlockExercise {
   exercise_id: string;
@@ -19,6 +20,7 @@ interface BlockExercise {
 
 export default function BlocksPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [blockName, setBlockName] = useState("");
@@ -205,7 +207,14 @@ export default function BlocksPage() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(block)}>
                       <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteBlock.mutate(block.id)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={async () => {
+                      if (await confirm({
+                        title: `¿Eliminar el bloque "${block.name}"?`,
+                        description: "Se eliminará el bloque y sus ejercicios de la biblioteca. Esta acción no se puede deshacer.",
+                      })) {
+                        deleteBlock.mutate(block.id);
+                      }
+                    }}>
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                   </div>

@@ -9,6 +9,7 @@ import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import VideoModal from "@/components/VideoModal";
+import { useConfirm } from "@/components/ConfirmDialog";
  
 const MANUAL_CLIENTS_KEY = "kiosk_manual_clients";
 const RECENT_CLIENTS_KEY = "kiosk_recent_clients";
@@ -43,6 +44,7 @@ function saveRecentClients(clients: { id: string; name: string }[]) {
 
 export default function KioskPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [selectedClientName, setSelectedClientName] = useState("");
@@ -955,7 +957,14 @@ export default function KioskPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteGroup.mutate(g.id)}
+                        onClick={async () => {
+                          if (await confirm({
+                            title: `¿Eliminar el turno "${g.name}"?`,
+                            description: "Se eliminará el turno de kiosco. Los alumnos no se borran, solo dejan de pertenecer a este turno. Esta acción no se puede deshacer.",
+                          })) {
+                            deleteGroup.mutate(g.id);
+                          }
+                        }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

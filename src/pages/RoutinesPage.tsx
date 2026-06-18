@@ -9,6 +9,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import RoutineDetailView from "@/components/RoutineDetailView";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 function useFolders(dbFolders: string[]) {
   const [localFolders, setLocalFolders] = useState<string[]>(() => {
@@ -38,6 +39,7 @@ function useFolders(dbFolders: string[]) {
 
 export default function RoutinesPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [routineName, setRoutineName] = useState("");
   const [routineDesc, setRoutineDesc] = useState("");
@@ -226,7 +228,14 @@ export default function RoutinesPage() {
             }}>
               <Pencil className="h-4 w-4 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => deleteRoutine.mutate(routine.id)}>
+            <Button variant="ghost" size="icon" onClick={async () => {
+              if (await confirm({
+                title: `¿Eliminar la rutina "${routine.name}"?`,
+                description: "Se eliminará la rutina con todos sus ejercicios. Esta acción no se puede deshacer.",
+              })) {
+                deleteRoutine.mutate(routine.id);
+              }
+            }}>
               <Trash2 className="h-4 w-4 text-destructive" />
             </Button>
           </div>

@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 import AppLayout from "@/components/AppLayout";
 
 // Lazy-loaded pages — each route gets its own chunk, only loaded on demand
@@ -108,12 +109,14 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<AuthPageWrapper />} />
-            <Route path="/*"     element={<ProtectedRoutes />} />
-          </Routes>
-        </BrowserRouter>
+        <ConfirmProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<AuthPageWrapper />} />
+              <Route path="/*"     element={<ProtectedRoutes />} />
+            </Routes>
+          </BrowserRouter>
+        </ConfirmProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

@@ -11,9 +11,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import RoutineDetailView from "@/components/RoutineDetailView";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
@@ -327,7 +329,14 @@ export default function ClientsPage() {
             }}>
               <Pencil className="h-4 w-4 mr-2" />Editar
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => deleteMutation.mutate(selectedClient.id)}>
+            <Button variant="destructive" size="sm" onClick={async () => {
+              if (await confirm({
+                title: `¿Eliminar a ${selectedClient.name}?`,
+                description: "Se eliminará el alumno junto con sus entrenamientos asignados. Esta acción no se puede deshacer.",
+              })) {
+                deleteMutation.mutate(selectedClient.id);
+              }
+            }}>
               <Trash2 className="h-4 w-4 mr-2" />Eliminar
             </Button>
           </div>

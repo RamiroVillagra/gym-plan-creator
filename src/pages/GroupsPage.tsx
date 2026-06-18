@@ -11,10 +11,12 @@ import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function GroupsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -256,7 +258,14 @@ export default function GroupsPage() {
                   }}>
                     <Plus className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => deleteGroup.mutate(group.id)}>
+                  <Button variant="ghost" size="icon" onClick={async () => {
+                    if (await confirm({
+                      title: `¿Eliminar el grupo "${group.name}"?`,
+                      description: "Se eliminará el grupo. Los alumnos no se borran, solo dejan de pertenecer a este grupo. Esta acción no se puede deshacer.",
+                    })) {
+                      deleteGroup.mutate(group.id);
+                    }
+                  }}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
