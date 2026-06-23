@@ -8,6 +8,7 @@ import { format, addWeeks } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import VideoModal from "@/components/VideoModal";
 import { useConfirm } from "@/components/ConfirmDialog";
  
@@ -693,15 +694,23 @@ export default function KioskPage() {
  
       <div className="flex gap-4 mb-8 flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <label className="text-sm text-muted-foreground block mb-2">Seleccioná el turno:</label>
-          <select
-            className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-            value={selectedGroup}
-            onChange={e => setSelectedGroup(e.target.value)}
-          >
-            <option value="">Elegir turno</option>
-            {kioskGroups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+          <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block mb-2">Seleccioná el turno</label>
+          <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+            <SelectTrigger className="h-12 rounded-xl border-border bg-card px-4 text-base font-medium text-foreground shadow-sm transition-all hover:border-primary/50 hover:bg-primary/5 focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 data-[state=open]:border-primary/60 data-[state=open]:ring-2 data-[state=open]:ring-primary/20 [&>span]:truncate">
+              <SelectValue placeholder="Elegir turno" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-border shadow-lg">
+              {kioskGroups?.map(g => (
+                <SelectItem
+                  key={g.id}
+                  value={g.id}
+                  className="py-3 text-base rounded-lg cursor-pointer transition-colors focus:bg-primary/10 focus:text-primary data-[state=checked]:bg-primary/10 data-[state=checked]:font-semibold data-[state=checked]:text-primary"
+                >
+                  {g.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-end">
           <Button variant="outline" onClick={() => setSearchOpen(!searchOpen)}>
