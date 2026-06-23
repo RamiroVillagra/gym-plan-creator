@@ -87,7 +87,28 @@ export default function StudentProfilePage() {
       {isLoading ? (
         <div className="text-center py-16 text-muted-foreground">Cargando...</div>
       ) : !client ? (
-        <div className="text-center py-16 text-muted-foreground">No se encontró tu perfil.</div>
+        <div className="space-y-6">
+          <div className="text-center py-10 text-muted-foreground">
+            <p className="mb-2">No se encontró tu perfil de alumno.</p>
+            <p className="text-xs">Tu cuenta todavía no está vinculada a un alumno. Pedile a tu coach que la vincule.</p>
+          </div>
+          {/* Email visible para que el alumno sepa con qué cuenta entró */}
+          <div className="bg-card border border-border rounded-xl p-5">
+            <label className="text-xs text-muted-foreground">Estás usando la cuenta</label>
+            <div className="h-10 px-3 mt-1 flex items-center rounded-lg bg-secondary/50 text-sm text-muted-foreground border border-border/50">
+              {user?.email}
+            </div>
+          </div>
+          {/* Cerrar sesión SIEMPRE disponible, aunque no haya perfil vinculado */}
+          <Button
+            variant="outline"
+            onClick={signOut}
+            className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Cerrar sesión
+          </Button>
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Datos personales */}
