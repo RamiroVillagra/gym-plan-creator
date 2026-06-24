@@ -643,6 +643,7 @@ export default function KioskPage() {
                             reps={re.reps}
                             weight={re.weight}
                             unit={re.unit ?? "kg"}
+                            distance={re.distance ?? null}
                             setGroups={re.set_groups}
                             coachNotes={re.notes ?? null}
                             assignedWorkoutId={workout.id}
@@ -1074,9 +1075,10 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const KioskExerciseCard = forwardRef(function KioskExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, assignedWorkoutId, exerciseId, existingLogs, onLogSet, isLoggingSet,
+  exercise, sets, reps, weight, unit = "kg", distance, setGroups, coachNotes, assignedWorkoutId, exerciseId, existingLogs, onLogSet, isLoggingSet,
 }: {
   exercise: any; sets: number | null; reps: number | null; weight: number | null; unit?: string;
+  distance?: number | null; // valor de seg/m/cm (la unidad secundaria)
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   coachNotes?: string | null;
   assignedWorkoutId: string; exerciseId: string; existingLogs: any[];
@@ -1141,10 +1143,10 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         </div>
         {setGroups?.length ? (
           setGroups.map((g, i) => (
-            <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${unit}` : ""}</p>
+            <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}{distance != null && unit !== "kg" ? ` × ${distance}${unit}` : ""}</p>
           ))
         ) : (
-          sets ? <p className="text-xs text-muted-foreground">{sets}×{reps ?? "?"}{weight ? ` @ ${weight}${unit}` : ""}</p> : null
+          (sets || distance != null) ? <p className="text-xs text-muted-foreground">{sets ?? 1}×{reps ?? "?"}{weight ? ` @ ${weight}kg` : ""}{distance != null && unit !== "kg" ? ` × ${distance}${unit}` : ""}</p> : null
         )}
         {coachNotes && (
           <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
