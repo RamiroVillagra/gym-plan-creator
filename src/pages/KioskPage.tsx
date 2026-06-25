@@ -1086,10 +1086,13 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   isLoggingSet?: boolean; // #2: para deshabilitar círculos mientras se guarda
 }, ref: any) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  // Para unidades de distancia/tiempo (cm/m/seg) el valor planificado vive en `distance`,
+  // no en weight → lo usamos para pre-rellenar la segunda columna (la que muestra la unidad).
+  const secondaryFor = (w: number | null) => (unit !== "kg" ? (distance ?? null) : w);
   // Expandir set_groups en filas individuales de series
   const allSets = setGroups?.length
-    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight })))
-    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: weight }));
+    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: secondaryFor(g.weight) })))
+    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: secondaryFor(weight) }));
 
   const [localSets, setLocalSets] = useState(
     allSets.map((s, i) => {
