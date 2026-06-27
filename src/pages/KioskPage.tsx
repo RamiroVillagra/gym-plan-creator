@@ -379,7 +379,7 @@ export default function KioskPage() {
       const hasAnyModification = [...cardRefs.current.values()].some(card => card.hasModifications());
 
       // Incluir TODOS los ejercicios (no solo los modificados)
-      const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number }[] }> = {};
+      const byExercise: Record<string, { assignedWorkoutId: string; exerciseId: string; sets: { set_number: number; reps_done: number; weight_used: number; distance_done?: number }[] }> = {};
       for (const [key, card] of cardRefs.current) {
         const sets = card.getSets();
         byExercise[key] = { assignedWorkoutId: card.assignedWorkoutId, exerciseId: card.exerciseId, sets };
@@ -397,6 +397,8 @@ export default function KioskPage() {
             set_number: s.set_number,
             reps_done: s.reps_done,
             weight_used: s.weight_used,
+            // solo presente para ejercicios con unidad secundaria; undefined se omite al serializar
+            distance_done: s.distance_done,
             completed: true,
           });
         }
@@ -1086,20 +1088,26 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
   isLoggingSet?: boolean; // #2: para deshabilitar círculos mientras se guarda
 }, ref: any) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  // Para unidades de distancia/tiempo (cm/m/seg) el valor planificado vive en `distance`,
-  // no en weight → lo usamos para pre-rellenar la segunda columna (la que muestra la unidad).
-  const secondaryFor = (w: number | null) => (unit !== "kg" ? (distance ?? null) : w);
+
+  // Qué columnas de registro mostrar:
+  // - kg (weight): si el ejercicio usa peso — unidad kg, o hay un valor de peso aunque la unidad sea de tiempo/distancia
+  // - secundaria (seg/m/cm): si la unidad no es kg y hay un valor planificado en `distance`
+  const showSecondary = unit !== "kg" && distance != null;
+  const anyGroupWeight = setGroups?.some(g => g.weight != null) ?? false;
+  const showWeight = unit === "kg" || weight != null || anyGroupWeight;
+
   // Expandir set_groups en filas individuales de series
   const allSets = setGroups?.length
-    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: secondaryFor(g.weight) })))
-    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: secondaryFor(weight) }));
+    ? setGroups.flatMap(g => Array.from({ length: g.sets }, () => ({ targetReps: g.reps, targetWeight: g.weight, targetSecondary: distance ?? null })))
+    : Array.from({ length: sets ?? 1 }, () => ({ targetReps: reps, targetWeight: weight, targetSecondary: distance ?? null }));
 
   const [localSets, setLocalSets] = useState(
     allSets.map((s, i) => {
       const log = existingLogs.find((l: any) => l.set_number === i + 1);
       return {
         reps: log?.reps_done?.toString() ?? s.targetReps?.toString() ?? "",
-        weight: log?.weight_used?.toString() ?? s.targetWeight?.toString() ?? "",
+        weight: log?.weight_used?.toString() ?? (showWeight ? (s.targetWeight?.toString() ?? "") : ""),
+        secondary: log?.distance_done?.toString() ?? (showSecondary ? (s.targetSecondary?.toString() ?? "") : ""),
       };
     })
   );
@@ -1113,22 +1121,32 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
     new Set(existingLogs.filter((l: any) => l.completed).map((l: any) => l.set_number as number))
   );
 
+  // Construye el registro de una serie. distance_done solo se incluye para ejercicios
+  // con unidad secundaria → los ejercicios normales en kg no envían esa columna.
+  const buildSet = (s: { reps: string; weight: string; secondary: string }, i: number) => {
+    const pReps = parseInt(s.reps);
+    const pWeight = parseFloat(s.weight);
+    const pSec = parseFloat(s.secondary);
+    const row: { set_number: number; reps_done: number; weight_used: number; distance_done?: number } = {
+      set_number: i + 1,
+      reps_done: isNaN(pReps) ? (allSets[i]?.targetReps ?? 0) : pReps,
+      weight_used: isNaN(pWeight) ? (showWeight ? (allSets[i]?.targetWeight ?? 0) : 0) : pWeight,
+    };
+    if (showSecondary) {
+      row.distance_done = isNaN(pSec) ? (allSets[i]?.targetSecondary ?? 0) : pSec;
+    }
+    return row;
+  };
+
   useImperativeHandle(ref, () => ({
     assignedWorkoutId,
     exerciseId,
-    getSets: () => localSets.map((s, i) => {
-      const pReps   = parseInt(s.reps);
-      const pWeight = parseFloat(s.weight);
-      return {
-        set_number:   i + 1,
-        reps_done:    isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps,
-        weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
-      };
-    }),
+    getSets: () => localSets.map((s, i) => buildSet(s, i)),
     // True solo si el entrenador cambió algo respecto a lo que estaba pre-relleno al abrir
     hasModifications: () => localSets.some((s, i) =>
-      s.reps    !== initialSetsRef.current[i]?.reps ||
-      s.weight  !== initialSetsRef.current[i]?.weight
+      s.reps      !== initialSetsRef.current[i]?.reps ||
+      s.weight    !== initialSetsRef.current[i]?.weight ||
+      s.secondary !== initialSetsRef.current[i]?.secondary
     ),
   }));
 
@@ -1159,30 +1177,35 @@ const KioskExerciseCard = forwardRef(function KioskExerciseCard({
         {/* Encabezados de columna */}
         <div className="flex items-center gap-3">
           <span className="w-12" />
-          <span className="w-20 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">Reps</span>
-          <span className="w-20 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">{unit}</span>
+          <span className="w-16 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">Reps</span>
+          {showWeight && <span className="w-16 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">kg</span>}
+          {showSecondary && <span className="w-16 text-[10px] font-semibold text-muted-foreground text-center uppercase tracking-wider">{unit}</span>}
         </div>
         {localSets.map((s, i) => {
           // El círculo se muestra verde si fue confirmado localmente o ya tenía log guardado
           const isLogged = confirmedSets.has(i + 1) || existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
+          const update = (field: "reps" | "weight" | "secondary", val: string) =>
+            setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, [field]: val } : s2));
           return (
             <div key={i} className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground w-12">Serie {i + 1}</span>
-              <Input type="number" placeholder="Reps" className="w-20 h-8 text-sm" value={s.reps}
-                onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, reps: val } : s2)); }} />
-              <Input type="number" placeholder={unit} className="w-20 h-8 text-sm" value={s.weight}
-                onChange={e => { const val = e.target.value; setLocalSets(prev => prev.map((s2, j) => j === i ? { ...s2, weight: val } : s2)); }} />
+              <Input type="number" placeholder="Reps" className="w-16 h-8 text-sm" value={s.reps}
+                onChange={e => update("reps", e.target.value)} />
+              {showWeight && (
+                <Input type="number" placeholder="kg" className="w-16 h-8 text-sm" value={s.weight}
+                  onChange={e => update("weight", e.target.value)} />
+              )}
+              {showSecondary && (
+                <Input type="number" placeholder={unit} className="w-16 h-8 text-sm" value={s.secondary}
+                  onChange={e => update("secondary", e.target.value)} />
+              )}
               <button
                 disabled={isLoggingSet}
                 onClick={() => {
-                  const pReps   = parseInt(s.reps);
-                  const pWeight = parseFloat(s.weight);
-                  const reps_done   = isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps;
-                  const weight_used = isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight;
                   // Marcar el círculo verde visualmente
                   setConfirmedSets(prev => new Set([...prev, i + 1]));
                   // Siempre guardar en DB (el ícono del calendario usa comparación vs plan)
-                  onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, set_number: i + 1, reps_done, weight_used });
+                  onLogSet({ assigned_workout_id: assignedWorkoutId, exercise_id: exerciseId, ...buildSet(s, i) });
                 }}
               >
                 {isLogged ? <CheckCircle2 className="h-5 w-5 text-primary" /> : <Circle className={`h-5 w-5 ${isLoggingSet ? "text-muted-foreground/40" : "text-muted-foreground hover:text-primary"}`} />}
