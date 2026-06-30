@@ -138,12 +138,21 @@ export default function KioskPage() {
 
   const assignWorkoutToday = useMutation({
     mutationFn: async ({ clientId, routineId, dayNumber, sourceWorkoutId }: { clientId: string; routineId: string | null; dayNumber: number; sourceWorkoutId: string }) => {
+      // "Agregar Alumno" copia el entrenamiento COMPLETO, incluidos los comentarios:
+      // traemos la nota de sesión del día fuente para copiarla al de hoy.
+      const { data: sourceWorkout } = await supabase
+        .from("assigned_workouts")
+        .select("notes")
+        .eq("id", sourceWorkoutId)
+        .maybeSingle();
+
       // Crear el workout de hoy primero (si falla, no se borra el anterior)
       const { data: newWorkout, error } = await supabase.from("assigned_workouts").insert({
         client_id: clientId,
         routine_id: routineId,
         workout_date: today,
         day_number: dayNumber,
+        notes: sourceWorkout?.notes ?? null,
       }).select().single();
       if (error) throw error;
 
@@ -175,7 +184,7 @@ export default function KioskPage() {
           day_number: ex.day_number,
           rest_seconds: ex.rest_seconds,
           set_groups: ex.set_groups ?? null,
-          notes: null, // los comentarios de sesión no se arrastran al día de hoy
+          notes: ex.notes ?? null, // Agregar Alumno copia los comentarios del ejercicio
         }));
         const { error: copyError } = await supabase.from("assigned_workout_exercises").insert(copies);
         if (copyError) throw copyError;
@@ -200,7 +209,7 @@ export default function KioskPage() {
             day_number: ex.day_number,
             rest_seconds: ex.rest_seconds,
             set_groups: ex.set_groups ?? null,
-            notes: null, // los comentarios de sesión no se arrastran al día de hoy
+            notes: ex.notes ?? null, // Agregar Alumno copia los comentarios del ejercicio
           }));
           const { error: baseError } = await supabase.from("assigned_workout_exercises").insert(copies);
           if (baseError) throw baseError;
