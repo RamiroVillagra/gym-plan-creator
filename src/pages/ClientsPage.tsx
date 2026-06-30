@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info, Pencil, Link2 } from "lucide-react";
+import { Plus, Trash2, Search, ArrowLeft, ClipboardList, CalendarDays, UsersRound, X, Eye, FileText, Info, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format, addDays, addWeeks, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
@@ -55,10 +55,6 @@ export default function ClientsPage() {
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
 
-  // Vincular cuenta dialog
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkSearch, setLinkSearch] = useState("");
-
   const updateInfo = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
       const { error } = await supabase.from("clients").update({ notes: notes || null }).eq("id", id);
@@ -96,46 +92,6 @@ export default function ClientsPage() {
       toast.success("Datos actualizados");
     },
     onError: () => toast.error("Error al actualizar"),
-  });
-
-  // Cuentas de acceso (auth.users) para vincular — via función RPC (solo coach)
-  const { data: authAccounts } = useQuery({
-    queryKey: ["auth-accounts"],
-    enabled: !!selectedClient,
-    queryFn: async () => {
-      const { data, error } = await (supabase.rpc as any)("list_auth_accounts");
-      if (error) throw error;
-      return (data ?? []) as { id: string; email: string; linked_client: string | null }[];
-    },
-  });
-
-  const linkAccount = useMutation({
-    mutationFn: async (accountId: string) => {
-      const { error } = await supabase.from("clients").update({ user_id: accountId } as any).eq("id", selectedClient.id);
-      if (error) throw error;
-    },
-    onSuccess: (_d, accountId) => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["auth-accounts"] });
-      setSelectedClient((prev: any) => ({ ...prev, user_id: accountId }));
-      setLinkOpen(false); setLinkSearch("");
-      toast.success("Cuenta vinculada");
-    },
-    onError: () => toast.error("Error al vincular la cuenta"),
-  });
-
-  const unlinkAccount = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("clients").update({ user_id: null } as any).eq("id", selectedClient.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["auth-accounts"] });
-      setSelectedClient((prev: any) => ({ ...prev, user_id: null }));
-      toast.success("Cuenta desvinculada");
-    },
-    onError: () => toast.error("Error al desvincular"),
   });
 
   // View routine detail
@@ -399,36 +355,6 @@ export default function ClientsPage() {
           </Button>
         </div>
 
-        {/* Cuenta de acceso */}
-        <div className="mb-6 bg-card border border-border rounded-xl p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Link2 className="h-4 w-4 text-primary shrink-0" />Cuenta de acceso
-              </p>
-              {selectedClient.user_id ? (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  Vinculada{(() => {
-                    const e = authAccounts?.find(a => a.id === selectedClient.user_id)?.email;
-                    return e ? `: ${e}` : "";
-                  })()}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-0.5">Sin vincular — el alumno todavía no puede entrar a la app.</p>
-              )}
-            </div>
-            {selectedClient.user_id ? (
-              <Button variant="outline" size="sm" className="shrink-0" onClick={() => unlinkAccount.mutate()} disabled={unlinkAccount.isPending}>
-                Desvincular
-              </Button>
-            ) : (
-              <Button size="sm" className="shrink-0" onClick={() => { setLinkSearch(""); setLinkOpen(true); }}>
-                <Link2 className="h-4 w-4 mr-2" />Vincular cuenta
-              </Button>
-            )}
-          </div>
-        </div>
-
         {/* Assigned workouts */}
         <div className="mb-6">
           <h2 className="text-lg font-heading font-bold mb-3 flex items-center gap-2">
@@ -489,43 +415,6 @@ export default function ClientsPage() {
             </div>
           )}
         </div>
-
-        {/* Vincular cuenta dialog */}
-        <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Vincular cuenta a {selectedClient.name}</DialogTitle></DialogHeader>
-            <div className="space-y-3 mt-2">
-              <p className="text-xs text-muted-foreground">
-                Elegí la cuenta de acceso (la que creaste para este alumno) que le corresponde. Las que ya están vinculadas a otro alumno aparecen deshabilitadas.
-              </p>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar por email..." className="pl-10" value={linkSearch} onChange={e => setLinkSearch(e.target.value)} autoFocus />
-              </div>
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {!authAccounts ? (
-                  <p className="text-xs text-muted-foreground px-1 py-2">Cargando cuentas...</p>
-                ) : (() => {
-                  const list = authAccounts.filter(a => a.email?.toLowerCase().includes(linkSearch.toLowerCase()));
-                  if (!list.length) {
-                    return <p className="text-xs text-muted-foreground px-1 py-2">Sin resultados. Si no aparece ninguna cuenta, falta correr la función <code>list_auth_accounts</code> en Supabase.</p>;
-                  }
-                  return list.map(a => (
-                    <button
-                      key={a.id}
-                      disabled={!!a.linked_client || linkAccount.isPending}
-                      onClick={() => linkAccount.mutate(a.id)}
-                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-secondary disabled:opacity-50 disabled:cursor-default flex items-center justify-between gap-2 transition-colors"
-                    >
-                      <span className="text-sm text-foreground truncate">{a.email}</span>
-                      {a.linked_client && <span className="text-[10px] text-muted-foreground shrink-0">ya vinculada a {a.linked_client}</span>}
-                    </button>
-                  ));
-                })()}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         {/* Planificar dialog */}
         <Dialog open={assignOpen} onOpenChange={v => { setAssignOpen(v); if (!v) { setAssignRoutineId(""); setAssignDays([]); setAssignWeeks("4"); } }}>
