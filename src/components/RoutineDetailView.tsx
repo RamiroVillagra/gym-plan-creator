@@ -403,7 +403,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateSetGroups = useMutation({
-    mutationFn: async ({ id, groups }: { id: string; groups: { sets: string; reps: string; weight: string }[] }) => {
+    mutationFn: async ({ id, groups, notes }: { id: string; groups: { sets: string; reps: string; weight: string }[]; notes?: string | null }) => {
       const parsed = groups.map(g => ({
         sets: parseInt(g.sets) || 1,
         reps: parseInt(g.reps) || 1,
@@ -427,7 +427,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           if (cloned) {
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ set_groups: value })
+              .update({ set_groups: value, notes: notes ?? null })
               .eq("id", cloned.id);
             if (error) throw error;
             return;
@@ -438,10 +438,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         return;
       }
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
-      const { data: current } = await supabase.from(table).select("set_groups").eq("id", id).single();
-      const { error } = await supabase.from(table).update({ set_groups: value }).eq("id", id);
+      const { data: current } = await supabase.from(table).select("set_groups, notes").eq("id", id).single();
+      const { error } = await supabase.from(table).update({ set_groups: value, notes: notes ?? null }).eq("id", id);
       if (error) throw error;
-      return { id, prev: { set_groups: current?.set_groups ?? null }, table };
+      return { id, prev: { set_groups: current?.set_groups ?? null, notes: (current as any)?.notes ?? null }, table };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: invalidateKey });
@@ -747,6 +747,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                         weight: g.weight != null ? String(g.weight) : "",
                                       }))
                                     );
+                                    setEditNotes(re.notes ?? "");
                                     setEditingGroupsId(re.id);
                                   }
                                   return;
@@ -844,6 +845,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                         ? re.set_groups.map((g: any) => ({ sets: String(g.sets), reps: String(g.reps), weight: g.weight != null ? String(g.weight) : "" }))
                                         : [{ sets: String(re.sets ?? 3), reps: String(re.reps ?? 10), weight: re.weight != null ? String(re.weight) : "" }];
                                       setEditingGroups(groups);
+                                      setEditNotes(re.notes ?? "");
                                       setEditingGroupsId(re.id);
                                     }
                                   }}
@@ -877,6 +879,13 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               </button>
                             </div>
                           ))}
+                          {/* Comentario — disponible también con series progresivas */}
+                          <Input
+                            className="h-7 text-xs"
+                            placeholder="Comentario (opcional)"
+                            value={editNotes}
+                            onChange={e => setEditNotes(e.target.value)}
+                          />
                           <div className="flex gap-2 pt-1">
                             <button
                               className="text-[10px] text-primary hover:opacity-70 flex items-center gap-0.5"
@@ -888,7 +897,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                             <button className="text-[10px] text-muted-foreground hover:opacity-70" onClick={() => setEditingGroupsId(null)}>Cancelar</button>
                             <button
                               className="text-[10px] text-primary font-bold hover:opacity-70"
-                              onClick={() => updateSetGroups.mutate({ id: re.id, groups: editingGroups })}
+                              onClick={() => updateSetGroups.mutate({ id: re.id, groups: editingGroups, notes: editNotes.trim() || null })}
                             >
                               Guardar
                             </button>
