@@ -13,7 +13,7 @@ const coachNav = [
   { to: "/calendar", label: "Calendario", icon: CalendarDays },
   { to: "/groups", label: "Grupos", icon: UsersRound },
   { to: "/bloques", label: "Bloques", icon: Layers },
-  { to: "/kiosk", label: "Modo Kiosco", icon: Monitor },
+  { to: "/kiosk", label: "Modo Sala", icon: Monitor },
   { to: "/stats", label: "Estadísticas", icon: TrendingUp },
 ];
 

@@ -697,7 +697,7 @@ export default function KioskPage() {
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2">
           <Dumbbell className="h-8 w-8 text-primary" />
-          <span className="font-heading text-2xl font-bold">Modo Kiosco</span>
+          <span className="font-heading text-2xl font-bold">Modo Sala</span>
         </div>
         <Button variant="outline" onClick={() => setManagingOpen(true)}>
           <Settings className="h-4 w-4 mr-2" />Gestionar Turnos
@@ -935,7 +935,7 @@ export default function KioskPage() {
       <Dialog open={managingOpen} onOpenChange={setManagingOpen}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Gestionar Turnos de Kiosco</DialogTitle>
+            <DialogTitle>Gestionar Turnos de Sala</DialogTitle>
           </DialogHeader>
  
           {/* Crear nuevo turno */}
@@ -985,7 +985,7 @@ export default function KioskPage() {
                         onClick={async () => {
                           if (await confirm({
                             title: `¿Eliminar el turno "${g.name}"?`,
-                            description: "Se eliminará el turno de kiosco. Los alumnos no se borran, solo dejan de pertenecer a este turno. Esta acción no se puede deshacer.",
+                            description: "Se eliminará el turno de sala. Los alumnos no se borran, solo dejan de pertenecer a este turno. Esta acción no se puede deshacer.",
                           })) {
                             deleteGroup.mutate(g.id);
                           }
