@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play, RefreshCw } from "lucide-react";
-import { format, addWeeks } from "date-fns";
+import { format, addWeeks, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -156,12 +156,46 @@ export default function KioskPage() {
       }).select().single();
       if (error) throw error;
 
-      // Borrar el workout anterior solo después de insertar el nuevo exitosamente
-      await supabase.from("assigned_workouts")
-        .delete()
+      // En vez de BORRAR el entrenamiento que el alumno ya tenía hoy, lo REPROGRAMAMOS
+      // al próximo día libre para no perderlo (esto pasa seguido, no es un error).
+      const { data: prevToday } = await supabase
+        .from("assigned_workouts")
+        .select("id")
         .eq("client_id", clientId)
         .eq("workout_date", today)
         .neq("id", newWorkout.id);
+
+      if (prevToday?.length) {
+        // Días ya ocupados del alumno (de mañana en adelante) para encontrar los huecos libres
+        const from = format(addDays(new Date(), 1), "yyyy-MM-dd");
+        const to = format(addDays(new Date(), 120), "yyyy-MM-dd");
+        const { data: occupied } = await supabase
+          .from("assigned_workouts")
+          .select("workout_date")
+          .eq("client_id", clientId)
+          .gte("workout_date", from)
+          .lte("workout_date", to);
+        const taken = new Set((occupied ?? []).map((w: any) => w.workout_date));
+
+        const movedDates: string[] = [];
+        let offset = 1;
+        for (const w of prevToday) {
+          // buscar el próximo día sin entrenamiento asignado
+          let dateStr = format(addDays(new Date(), offset), "yyyy-MM-dd");
+          while (taken.has(dateStr) && offset < 120) {
+            offset++;
+            dateStr = format(addDays(new Date(), offset), "yyyy-MM-dd");
+          }
+          taken.add(dateStr);
+          offset++;
+          // Mover el entrenamiento (conserva ejercicios, comentarios y registros)
+          await supabase.from("assigned_workouts").update({ workout_date: dateStr }).eq("id", w.id);
+          movedDates.push(dateStr);
+        }
+        if (movedDates.length) {
+          toast.info(`El entrenamiento que estaba hoy se movió al ${format(new Date(movedDates[0] + "T12:00:00"), "EEE d 'de' MMM", { locale: es })}`);
+        }
+      }
 
       // Primero intentar copiar ejercicios modificados del día fuente
       const { data: sourceExercises } = await supabase
@@ -220,6 +254,9 @@ export default function KioskPage() {
       queryClient.invalidateQueries({ queryKey: ["kiosk-workouts"] });
       queryClient.invalidateQueries({ queryKey: ["kiosk-assigned-exercises"] });
       queryClient.invalidateQueries({ queryKey: ["kiosk-logs"] });
+      // El entrenamiento reprogramado debe reflejarse en calendario y vista del alumno
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["student-workouts"] });
     },
   });
  
