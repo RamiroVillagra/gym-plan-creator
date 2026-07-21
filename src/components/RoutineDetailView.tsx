@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
@@ -58,6 +58,13 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   // Guardar bloque en biblioteca
   const [savingBlockNum, setSavingBlockNum] = useState<number | null>(null);
   const [saveBlockName, setSaveBlockName] = useState("");
+
+  // Copiar bloque directo a otro alumno (sin pasar por la biblioteca)
+  const [copyBlockNum, setCopyBlockNum] = useState<number | null>(null);
+  const [copyBlockClient, setCopyBlockClient] = useState("");
+  const [copyBlockClientName, setCopyBlockClientName] = useState("");
+  const [copyBlockClientSearch, setCopyBlockClientSearch] = useState("");
+  const [copyBlockDate, setCopyBlockDate] = useState("");
 
   // Series progresivas (set_groups)
   const [editingGroupsId, setEditingGroupsId] = useState<string | null>(null);
@@ -559,6 +566,79 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     onError: () => toast.error("Error al guardar el bloque"),
   });
 
+  // Alumnos destino para copiar un bloque directo (solo se cargan al abrir el diálogo)
+  const { data: copyClients } = useQuery({
+    queryKey: ["clients"],
+    enabled: copyBlockNum !== null,
+    queryFn: async () => {
+      const { data } = await supabase.from("clients").select("id, name").order("name");
+      return data ?? [];
+    },
+  });
+
+  const copyBlockToClient = useMutation({
+    mutationFn: async ({ blockNum, clientId, dateStr }: { blockNum: number; clientId: string; dateStr: string }) => {
+      // Ejercicios del bloque origen
+      const blockExercises = (routineExercises ?? []).filter(
+        (re: any) => (re.day_number ?? 1) === selectedDay && (re.block_number ?? 1) === blockNum
+      );
+      if (!blockExercises.length) throw new Error("Bloque vacío");
+
+      // Buscar o crear el entrenamiento del alumno destino en esa fecha
+      const { data: existing } = await supabase
+        .from("assigned_workouts")
+        .select("id, day_number")
+        .eq("client_id", clientId)
+        .eq("workout_date", dateStr)
+        .maybeSingle();
+
+      let targetWorkoutId = existing?.id as string | undefined;
+      const targetDay = existing?.day_number ?? 1;
+      if (!targetWorkoutId) {
+        const { data: nw, error } = await supabase
+          .from("assigned_workouts")
+          .insert({ client_id: clientId, workout_date: dateStr, day_number: 1 })
+          .select().single();
+        if (error) throw error;
+        targetWorkoutId = nw.id;
+      }
+
+      // El bloque se agrega como uno NUEVO al final (no pisa lo que ya haya ese día)
+      const { data: destEx } = await supabase
+        .from("assigned_workout_exercises")
+        .select("block_number")
+        .eq("assigned_workout_id", targetWorkoutId);
+      const nextBlock = destEx?.length ? Math.max(...destEx.map((e: any) => e.block_number ?? 1)) + 1 : 1;
+
+      const rows = blockExercises
+        .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+        .map((re: any, i: number) => ({
+          assigned_workout_id: targetWorkoutId,
+          exercise_id: re.exercise_id,
+          sets: re.sets,
+          reps: re.reps,
+          weight: re.weight,
+          unit: re.unit ?? "kg",
+          distance: re.distance ?? null,
+          set_groups: re.set_groups ?? null,
+          notes: re.notes ?? null,
+          rest_seconds: re.rest_seconds ?? null,
+          order_index: i,
+          block_number: nextBlock,
+          day_number: targetDay,
+        }));
+      const { error: ie } = await supabase.from("assigned_workout_exercises").insert(rows);
+      if (ie) throw ie;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-workout-exercises"] });
+      setCopyBlockNum(null); setCopyBlockClient(""); setCopyBlockClientName(""); setCopyBlockClientSearch(""); setCopyBlockDate("");
+      toast.success("Bloque copiado al alumno");
+    },
+    onError: () => toast.error("Error al copiar el bloque"),
+  });
+
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
@@ -644,6 +724,18 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                     <LibraryBig className="h-3 w-3 text-muted-foreground" />
                   </button>
                 )}
+                {/* Copiar este bloque directo a otro alumno */}
+                <button
+                  onClick={() => {
+                    setCopyBlockNum(blockNum);
+                    setCopyBlockDate(format(new Date(), "yyyy-MM-dd"));
+                    setCopyBlockClient(""); setCopyBlockClientName(""); setCopyBlockClientSearch("");
+                  }}
+                  className="p-0.5 rounded hover:bg-secondary/60 transition-colors opacity-0 group-hover:opacity-100"
+                  title="Copiar bloque a un alumno"
+                >
+                  <Copy className="h-3 w-3 text-muted-foreground" />
+                </button>
                 {editable && (
                   <>
                     <button
@@ -1108,6 +1200,62 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           </Dialog>
         </>
       )}
+
+      {/* Dialog: copiar bloque directo a otro alumno */}
+      <Dialog open={copyBlockNum !== null} onOpenChange={(o) => { if (!o) { setCopyBlockNum(null); setCopyBlockClient(""); setCopyBlockClientName(""); setCopyBlockClientSearch(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Copiar Bloque {copyBlockNum} a un alumno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            {/* Alumno destino */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Alumno</label>
+              {copyBlockClient ? (
+                <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
+                  <span className="text-sm font-medium text-primary">{copyBlockClientName}</span>
+                  <button onClick={() => { setCopyBlockClient(""); setCopyBlockClientName(""); setCopyBlockClientSearch(""); }}>
+                    <Trash2 className="h-3.5 w-3.5 text-primary/60 hover:text-primary" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Buscar alumno..." className="pl-10" value={copyBlockClientSearch} onChange={e => setCopyBlockClientSearch(e.target.value)} autoFocus />
+                </div>
+              )}
+              {!copyBlockClient && copyBlockClientSearch && (
+                <div className="mt-1 border border-border rounded-lg bg-card max-h-40 overflow-y-auto">
+                  {(copyClients ?? []).filter((c: any) => c.name.toLowerCase().includes(copyBlockClientSearch.toLowerCase())).map((c: any) => (
+                    <button key={c.id}
+                      onClick={() => { setCopyBlockClient(c.id); setCopyBlockClientName(c.name); setCopyBlockClientSearch(""); }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors">
+                      {c.name}
+                    </button>
+                  ))}
+                  {!(copyClients ?? []).filter((c: any) => c.name.toLowerCase().includes(copyBlockClientSearch.toLowerCase())).length && (
+                    <p className="text-xs text-muted-foreground px-3 py-2">Sin resultados.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Fecha destino */}
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">¿Qué día?</label>
+              <Input type="date" value={copyBlockDate} onChange={e => setCopyBlockDate(e.target.value)} />
+              <p className="text-[10px] text-muted-foreground mt-1">El bloque se agrega al final de ese día (no reemplaza lo que ya tenga).</p>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!copyBlockClient || !copyBlockDate || copyBlockToClient.isPending}
+              onClick={() => copyBlockToClient.mutate({ blockNum: copyBlockNum!, clientId: copyBlockClient, dateStr: copyBlockDate })}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              {copyBlockToClient.isPending ? "Copiando..." : "Copiar bloque"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: insertar bloque desde biblioteca */}
       <Dialog open={insertBlockOpen} onOpenChange={setInsertBlockOpen}>
