@@ -48,6 +48,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editUnit, setEditUnit] = useState("kg");
   const [editDistance, setEditDistance] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editBlock, setEditBlock] = useState<number>(1);
 
   // Historial por ejercicio
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
@@ -314,7 +315,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateExercise = useMutation({
-    mutationFn: async ({ id, sets, reps, weight, unit, distance, notes }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null; notes: string | null }) => {
+    mutationFn: async ({ id, sets, reps, weight, unit, distance, notes, block }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null; notes: string | null; block: number }) => {
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
@@ -322,7 +323,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         if (original) {
           const { data: cloned } = await supabase
             .from("assigned_workout_exercises")
-            .select("id, sets, reps, weight, unit, distance")
+            .select("id, sets, reps, weight, unit, distance, notes, block_number")
             .eq("assigned_workout_id", assignedWorkoutId!)
             .eq("exercise_id", original.exercise_id)
             .eq("day_number", original.day_number)
@@ -330,10 +331,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             .eq("order_index", original.order_index)
             .single();
           if (cloned) {
-            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance, notes: (cloned as any).notes };
+            const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance, notes: (cloned as any).notes, block_number: (cloned as any).block_number };
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ sets, reps, weight, unit, distance, notes: notes || null })
+              .update({ sets, reps, weight, unit, distance, notes: notes || null, block_number: block })
               .eq("id", cloned.id);
             if (error) throw error;
             return { id: cloned.id, prev, table };
@@ -344,8 +345,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         return null;
       }
       // Capture prev values before update
-      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance, notes").eq("id", id).single();
-      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance, notes: notes || null }).eq("id", id);
+      const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance, notes, block_number").eq("id", id).single();
+      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance, notes: notes || null, block_number: block }).eq("id", id);
       if (error) throw error;
       return { id, prev: current, table };
     },
@@ -798,6 +799,20 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 </>
                               )}
                             </div>
+                            {/* Selector de bloque — mover el ejercicio de bloque sin borrarlo */}
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground">Bloque:</span>
+                              {blocks.map(b => (
+                                <button key={b} type="button" onClick={() => setEditBlock(b)}
+                                  className={`h-6 min-w-6 px-2 text-[10px] rounded font-medium transition-colors ${editBlock === b ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                                  {b}
+                                </button>
+                              ))}
+                              <button type="button" onClick={() => setEditBlock((blocks.length ? Math.max(...blocks) : 0) + 1)}
+                                className={`h-6 px-2 text-[10px] rounded font-medium transition-colors flex items-center gap-0.5 ${!blocks.includes(editBlock) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"}`}>
+                                <Plus className="h-2.5 w-2.5" /> nuevo
+                              </button>
+                            </div>
                             <div className="flex items-center gap-1 mt-1">
                               <Input
                                 className="h-7 text-xs flex-1"
@@ -813,6 +828,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 unit: editUnit,
                                 distance: editUnit !== "kg" && editDistance ? parseFloat(editDistance) : null,
                                 notes: editNotes || null,
+                                block: editBlock,
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
                               </Button>
@@ -852,6 +868,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditUnit(re.unit ?? "kg");
                                 setEditDistance(re.distance != null ? String(re.distance) : "");
                                 setEditNotes(re.notes ?? "");
+                                setEditBlock(re.block_number ?? 1);
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
