@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
-import { format } from "date-fns";
+import { format, addDays, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { UndoEntry } from "@/pages/CalendarPage";
@@ -1239,11 +1239,35 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                 </div>
               )}
             </div>
-            {/* Fecha destino */}
+            {/* Día destino (días de la semana — próxima ocurrencia) */}
             <div>
               <label className="text-xs text-muted-foreground block mb-1">¿Qué día?</label>
-              <Input type="date" value={copyBlockDate} onChange={e => setCopyBlockDate(e.target.value)} />
-              <p className="text-[10px] text-muted-foreground mt-1">El bloque se agrega al final de ese día (no reemplaza lo que ya tenga).</p>
+              <div className="flex gap-1">
+                {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d, i) => {
+                  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+                  let date = addDays(startOfWeek(today0, { weekStartsOn: 1 }), i);
+                  if (date < today0) date = addDays(date, 7); // si ya pasó esta semana → la próxima
+                  const dateStr = format(date, "yyyy-MM-dd");
+                  const selected = copyBlockDate === dateStr;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setCopyBlockDate(dateStr)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        selected ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+              {copyBlockDate && (
+                <p className="text-[10px] text-muted-foreground mt-1 capitalize">
+                  {format(new Date(copyBlockDate + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })} — se agrega al final de ese día.
+                </p>
+              )}
             </div>
             <Button
               className="w-full"
