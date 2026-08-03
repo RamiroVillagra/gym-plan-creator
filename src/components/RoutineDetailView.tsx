@@ -183,7 +183,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       const workoutIds = clientWorkouts.map(w => w.id);
       const { data: logs } = await supabase
         .from("workout_logs")
-        .select("assigned_workout_id, set_number, reps_done, weight_used")
+        .select("assigned_workout_id, set_number, reps_done, weight_used, distance_done")
         .in("assigned_workout_id", workoutIds)
         .eq("exercise_id", historyExerciseId!)
         .eq("completed", true)
@@ -1032,7 +1032,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   <div className="flex flex-wrap gap-1">
                                     {session.logs.map((l: any, j: number) => (
                                       <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-card border border-border text-foreground">
-                                        S{l.set_number}: {l.reps_done ?? "—"} rep{l.weight_used ? ` @ ${l.weight_used}${re.unit ?? "kg"}` : ""}
+                                        S{l.set_number}: {l.reps_done ?? "—"} rep{l.weight_used ? ` @ ${l.weight_used}kg` : ""}{l.distance_done ? ` × ${l.distance_done}${re.unit ?? ""}` : ""}
                                       </span>
                                     ))}
                                   </div>
