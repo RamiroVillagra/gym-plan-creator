@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -640,6 +640,44 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     onError: () => toast.error("Error al copiar el bloque"),
   });
 
+  // Mensaje a nivel de la sesión (assigned_workouts.notes) — solo cuando es un día asignado
+  const [sessionNote, setSessionNote] = useState("");
+  const [noteSaved, setNoteSaved] = useState(true);
+  const noteInit = useRef(false);
+
+  const { data: sessionNoteData } = useQuery({
+    queryKey: ["session-note", assignedWorkoutId],
+    enabled: !!assignedWorkoutId,
+    queryFn: async () => {
+      const { data } = await supabase.from("assigned_workouts").select("notes").eq("id", assignedWorkoutId!).maybeSingle();
+      return (data?.notes as string | null) ?? "";
+    },
+  });
+
+  useEffect(() => {
+    if (sessionNoteData !== undefined && !noteInit.current) {
+      setSessionNote(sessionNoteData);
+      noteInit.current = true;
+    }
+  }, [sessionNoteData]);
+
+  const saveSessionNote = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("assigned_workouts")
+        .update({ notes: sessionNote.trim() || null })
+        .eq("id", assignedWorkoutId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setNoteSaved(true);
+      queryClient.invalidateQueries({ queryKey: ["session-note", assignedWorkoutId] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
+      toast.success("Mensaje de la sesión guardado");
+    },
+    onError: () => toast.error("Error al guardar el mensaje"),
+  });
+
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
@@ -671,6 +709,29 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
               (día asignado)
             </span>
           )}
+        </div>
+      )}
+
+      {/* Mensaje de la sesión — para el alumno, sobre todo el entrenamiento del día */}
+      {assignedWorkoutId && editable && (
+        <div className="mb-3 bg-card border border-border rounded-lg p-3">
+          <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-1.5">Mensaje de la sesión</p>
+          <textarea
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+            rows={2}
+            placeholder="Un mensaje para el alumno sobre esta sesión (ej: hoy bajá la intensidad, enfocate en la técnica...)"
+            value={sessionNote}
+            onChange={e => { setSessionNote(e.target.value); setNoteSaved(false); }}
+          />
+          <div className="flex justify-end mt-1.5">
+            <button
+              disabled={noteSaved || saveSessionNote.isPending}
+              onClick={() => saveSessionNote.mutate()}
+              className="text-[10px] font-medium px-3 py-1.5 rounded-lg bg-primary text-primary-foreground disabled:opacity-40 disabled:cursor-default transition-opacity"
+            >
+              {noteSaved ? "Guardado" : saveSessionNote.isPending ? "Guardando..." : "Guardar mensaje"}
+            </button>
+          </div>
         </div>
       )}
 
