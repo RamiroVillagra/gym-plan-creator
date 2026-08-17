@@ -1219,7 +1219,14 @@ export default function CalendarPage() {
                     variant="outline"
                     size="sm"
                     className="flex-1"
-                    onClick={() => { setDetailWorkout(detailWorkout); setCopyWeekOffset(0); setCopyOpen(true); }}
+                    onClick={() => {
+                      setDetailWorkout(detailWorkout);
+                      // Por defecto, la semana destino es la semana ACTUAL (no la del entrenamiento)
+                      const wkStart = startOfWeek(new Date(detailWorkout.workout_date + "T12:00:00"), { weekStartsOn: 1 });
+                      const curStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+                      setCopyWeekOffset(Math.round((curStart.getTime() - wkStart.getTime()) / (7 * 86400000)));
+                      setCopyOpen(true);
+                    }}
                   >
                     <Copy className="h-4 w-4 mr-2" />Copiar a otros días
                   </Button>
