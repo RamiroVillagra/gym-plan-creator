@@ -649,8 +649,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     queryKey: ["session-note", assignedWorkoutId],
     enabled: !!assignedWorkoutId,
     queryFn: async () => {
-      const { data } = await supabase.from("assigned_workouts").select("notes").eq("id", assignedWorkoutId!).maybeSingle();
-      return (data?.notes as string | null) ?? "";
+      const { data } = await supabase.from("assigned_workouts").select("coach_note").eq("id", assignedWorkoutId!).maybeSingle();
+      return ((data as any)?.coach_note as string | null) ?? "";
     },
   });
 
@@ -665,7 +665,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     mutationFn: async () => {
       const { error } = await supabase
         .from("assigned_workouts")
-        .update({ notes: sessionNote.trim() || null })
+        .update({ coach_note: sessionNote.trim() || null } as any)
         .eq("id", assignedWorkoutId!);
       if (error) throw error;
     },

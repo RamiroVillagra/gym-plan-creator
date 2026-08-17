@@ -10,7 +10,7 @@ import {
   eachDayOfInterval, isSameDay, isSameMonth,
 } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight, Dumbbell, CheckCircle2, Circle, History, ArrowLeft, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Dumbbell, CheckCircle2, Circle, History, ArrowLeft, Play, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import VideoModal from "@/components/VideoModal";
 
@@ -422,6 +422,17 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
             <span className="text-sm font-normal text-muted-foreground ml-2">— Día {workout.day_number ?? 1}</span>
           )}
         </h2>
+      )}
+
+      {/* Mensaje del coach para esta sesión */}
+      {workout.coach_note && (
+        <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2.5 mb-4">
+          <MessageSquare className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-primary mb-0.5">Mensaje de tu coach</p>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{workout.coach_note}</p>
+          </div>
+        </div>
       )}
 
       {/* Ejercicios */}

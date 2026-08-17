@@ -336,7 +336,8 @@ export default function CalendarPage() {
             routine_id: detailWorkout.routine_id || null,
             workout_date: dateStr,
             day_number: routineDay,
-            notes: detailWorkout.notes ?? null, // copiar el mensaje/comentarios de la sesión
+            // Solo se copia el mensaje del coach; el comentario del alumno (notes) NO se copia
+            coach_note: detailWorkout.coach_note ?? null,
           });
         }
       }

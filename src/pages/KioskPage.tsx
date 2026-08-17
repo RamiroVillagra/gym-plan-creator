@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play, RefreshCw } from "lucide-react";
+import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play, RefreshCw, MessageSquare } from "lucide-react";
 import { format, addWeeks, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -663,6 +663,15 @@ export default function KioskPage() {
                     Cambiar día
                   </button>
                 </div>
+                {workout.coach_note && (
+                  <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-xl px-3 py-2.5">
+                    <MessageSquare className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-primary mb-0.5">Mensaje del coach</p>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{workout.coach_note}</p>
+                    </div>
+                  </div>
+                )}
                 {blocks.map((blockNum: number) => {
                   const blockExercises = exercises.filter((re: any) => (re.block_number ?? 1) === blockNum);
                   return (
