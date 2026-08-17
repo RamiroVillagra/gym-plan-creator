@@ -58,6 +58,8 @@ export default function CalendarPage() {
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyDays, setCopyDays] = useState<{ dayOfWeek: number; routineDay: number }[]>([]);
   const [copyWeeks, setCopyWeeks] = useState("1");
+  // Semana base para copiar (0 = la semana del entrenamiento; negativo = anteriores; positivo = siguientes)
+  const [copyWeekOffset, setCopyWeekOffset] = useState(0);
 
   // Copy to client dialog (otro alumno)
   const [copyToClientOpen, setCopyToClientOpen] = useState(false);
@@ -325,7 +327,7 @@ export default function CalendarPage() {
       const targetDates: string[] = [];
       for (let w = 0; w < weeks; w++) {
         for (const { dayOfWeek, routineDay } of copyDays) {
-          const weekStart = startOfWeek(addWeeks(workoutDate, w + 1), { weekStartsOn: 1 });
+          const weekStart = startOfWeek(addWeeks(workoutDate, copyWeekOffset + w), { weekStartsOn: 1 });
           const date = addDays(weekStart, dayOfWeek);
           const dateStr = format(date, "yyyy-MM-dd");
           targetDates.push(dateStr);
@@ -384,7 +386,7 @@ export default function CalendarPage() {
     onSuccess: (ids) => {
       queryClient.invalidateQueries({ queryKey: ["assigned-workouts"] });
       setCopyOpen(false);
-      setCopyDays([]); setCopyWeeks("1");
+      setCopyDays([]); setCopyWeeks("1"); setCopyWeekOffset(0);
       if (ids?.length) pushUndo({ type: "ids", label: "Copiar", ids });
       toast.success("Entrenamiento copiado");
     },
@@ -1215,7 +1217,7 @@ export default function CalendarPage() {
                     variant="outline"
                     size="sm"
                     className="flex-1"
-                    onClick={() => { setDetailWorkout(detailWorkout); setCopyOpen(true); }}
+                    onClick={() => { setDetailWorkout(detailWorkout); setCopyWeekOffset(0); setCopyOpen(true); }}
                   >
                     <Copy className="h-4 w-4 mr-2" />Copiar a otros días
                   </Button>
@@ -1292,8 +1294,27 @@ export default function CalendarPage() {
                 );
               })()}
             </div>
+            {/* Semana destino — permite la misma semana o anteriores/posteriores */}
             <div>
-              <label className="text-xs text-muted-foreground">¿Por cuántas semanas?</label>
+              <label className="text-xs text-muted-foreground block mb-2">¿En qué semana?</label>
+              <div className="flex items-center justify-between border border-border rounded-lg px-2 py-1.5">
+                <button type="button" onClick={() => setCopyWeekOffset(o => o - 1)} className="p-1 rounded hover:bg-secondary text-muted-foreground">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-medium text-foreground text-center">
+                  {detailWorkout ? (() => {
+                    const ws = startOfWeek(addWeeks(new Date(detailWorkout.workout_date + "T12:00:00"), copyWeekOffset), { weekStartsOn: 1 });
+                    return `Semana del ${format(ws, "d MMM", { locale: es })} al ${format(addDays(ws, 6), "d MMM", { locale: es })}`;
+                  })() : ""}
+                </span>
+                <button type="button" onClick={() => setCopyWeekOffset(o => o + 1)} className="p-1 rounded hover:bg-secondary text-muted-foreground">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Usá las flechas para ir a semanas anteriores o posteriores.</p>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">¿Por cuántas semanas? (desde esa semana en adelante)</label>
               <Input
                 type="number"
                 min="1"
