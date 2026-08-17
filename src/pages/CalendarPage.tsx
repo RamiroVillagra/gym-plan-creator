@@ -336,6 +336,7 @@ export default function CalendarPage() {
             routine_id: detailWorkout.routine_id || null,
             workout_date: dateStr,
             day_number: routineDay,
+            notes: detailWorkout.notes ?? null, // copiar el mensaje/comentarios de la sesión
           });
         }
       }
@@ -375,7 +376,7 @@ export default function CalendarPage() {
               day_number: ex.day_number,
               rest_seconds: ex.rest_seconds,
               set_groups: ex.set_groups ?? null,
-              notes: null, // los comentarios NO se copian: el día nuevo arranca sin notas
+              notes: ex.notes ?? null, // copiar también el comentario de cada ejercicio
             });
           }
         }
