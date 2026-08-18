@@ -458,6 +458,11 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
                 unit={re.unit ?? "kg"}
                 setGroups={re.set_groups}
                 coachNotes={re.notes ?? null}
+                workoutType={re.workout_type ?? "strength"}
+                duration={re.duration_seconds ?? null}
+                distanceM={re.distance_meters ?? null}
+                micro={re.micro_pause ?? null}
+                macro={re.macro_pause ?? null}
                 exerciseId={re.exercise_id}
                 existingLogs={existingLogs?.filter((l: any) => l.exercise_id === re.exercise_id) ?? []}
                 prevLogs={(prevLogs ?? []).filter((l: any) => l.exercise_id === re.exercise_id)}
@@ -532,12 +537,15 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 
 const ExerciseCard = forwardRef(function ExerciseCard({
   exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet,
+  workoutType = "strength", duration, distanceM, micro, macro,
 }: {
   exercise: any; sets: number; reps: number; weight: number | null; unit?: string;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   coachNotes?: string | null;
   exerciseId: string; existingLogs: any[]; prevLogs: any[];
   onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => void;
+  // Aeróbico (no afecta a Fuerza)
+  workoutType?: string; duration?: number | null; distanceM?: number | null; micro?: number | null; macro?: number | null;
 }, ref: any) {
   const [showPrev, setShowPrev] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -578,6 +586,60 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       s.weightDone !== initialSetsRef.current[i]?.weightDone
     ),
   }));
+
+  // ── Vista AERÓBICA (misma tarjeta que Fuerza, con datos aeróbicos) ──
+  if (workoutType === "aerobic") {
+    return (
+      <div className="bg-card border border-border rounded-xl p-4 mb-3">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-2">
+              <p className="text-lg font-heading font-bold text-foreground leading-snug break-words">{exercise?.name}</p>
+              {(exercise as any)?.video_url && (
+                <button onClick={() => setVideoUrl((exercise as any).video_url)} title="Ver video del ejercicio" className="shrink-0 mt-0.5">
+                  <Play className="h-4 w-4 text-primary hover:text-primary/70 transition-colors" />
+                </button>
+              )}
+              <VideoModal url={videoUrl} onClose={() => setVideoUrl(null)} />
+            </div>
+            {coachNotes && (
+              <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{sets} series</span>
+        </div>
+
+        {/* Datos del plan aeróbico */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mb-3">
+          {duration ? <span>⏱ Tiempo: <span className="text-foreground font-medium">{duration}s</span></span> : null}
+          {distanceM ? <span>📏 Distancia: <span className="text-foreground font-medium">{distanceM}m</span></span> : null}
+          {micro ? <span>Micro pausa: <span className="text-foreground font-medium">{micro}s</span></span> : null}
+          {macro ? <span>Macro pausa: <span className="text-foreground font-medium">{macro}s</span></span> : null}
+        </div>
+
+        {/* Una fila por serie, con check para marcarla hecha */}
+        <div className="space-y-2">
+          {Array.from({ length: sets ?? 1 }, (_, i) => {
+            const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
+            return (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground w-16">Serie {i + 1}</span>
+                <span className="flex-1 text-xs text-muted-foreground">
+                  {duration ? `${duration}s` : ""}{duration && distanceM ? " · " : ""}{distanceM ? `${distanceM}m` : ""}
+                </span>
+                <button onClick={() => onLogSet({ exercise_id: exerciseId, set_number: i + 1, reps_done: 0, weight_used: 0 })}>
+                  {isLogged
+                    ? <CheckCircle2 className="h-7 w-7 text-primary" />
+                    : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />
+                  }
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
