@@ -219,6 +219,11 @@ export default function KioskPage() {
           rest_seconds: ex.rest_seconds,
           set_groups: ex.set_groups ?? null,
           notes: ex.notes ?? null, // Agregar Alumno copia los comentarios del ejercicio
+          workout_type: ex.workout_type ?? "strength",
+          duration_seconds: ex.duration_seconds ?? null,
+          distance_meters: ex.distance_meters ?? null,
+          micro_pause: ex.micro_pause ?? null,
+          macro_pause: ex.macro_pause ?? null,
         }));
         const { error: copyError } = await supabase.from("assigned_workout_exercises").insert(copies);
         if (copyError) throw copyError;
@@ -244,6 +249,11 @@ export default function KioskPage() {
             rest_seconds: ex.rest_seconds,
             set_groups: ex.set_groups ?? null,
             notes: ex.notes ?? null, // Agregar Alumno copia los comentarios del ejercicio
+            workout_type: ex.workout_type ?? "strength",
+            duration_seconds: ex.duration_seconds ?? null,
+            distance_meters: ex.distance_meters ?? null,
+            micro_pause: ex.micro_pause ?? null,
+            macro_pause: ex.macro_pause ?? null,
           }));
           const { error: baseError } = await supabase.from("assigned_workout_exercises").insert(copies);
           if (baseError) throw baseError;

@@ -49,6 +49,13 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [editDistance, setEditDistance] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editBlock, setEditBlock] = useState<number>(1);
+  // Campos aeróbicos del editor
+  const [editDuration, setEditDuration] = useState("");   // Tiempo (seg)
+  const [editDistanceM, setEditDistanceM] = useState("");  // Distancia (m)
+  const [editMicro, setEditMicro] = useState("");          // Micro pausa (seg)
+  const [editMacro, setEditMacro] = useState("");          // Macro pausa (seg)
+  // Tipo del día (fuerza/aeróbico); si es null se deriva de los ejercicios del día
+  const [dayTypeSel, setDayTypeSel] = useState<string | null>(null);
 
   // Historial por ejercicio
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
@@ -260,6 +267,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           sets: null,
           reps: null,
           weight: null,
+          workout_type: dayType, // hereda el tipo del día (fuerza/aeróbico)
           order_index: dayExercises.length + i,
           day_number: selectedDay,
           block_number: addExBlock,
@@ -315,8 +323,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   });
 
   const updateExercise = useMutation({
-    mutationFn: async ({ id, sets, reps, weight, unit, distance, notes, block }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null; notes: string | null; block: number }) => {
+    mutationFn: async ({ id, sets, reps, weight, unit, distance, notes, block, aerobic }: { id: string; sets: number; reps: number; weight: number | null; unit: string; distance: number | null; notes: string | null; block: number; aerobic?: { duration_seconds: number | null; distance_meters: number | null; micro_pause: number | null; macro_pause: number | null } }) => {
       const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      const payload: any = { sets, reps, weight, unit, distance, notes: notes || null, block_number: block };
+      if (aerobic) Object.assign(payload, aerobic);
       if (isOverrideMode && !hasOverrides) {
         await ensureOverrides();
         const original = routineExercises?.find((re: any) => re.id === id);
@@ -334,7 +344,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             const prev = { sets: cloned.sets, reps: cloned.reps, weight: cloned.weight, unit: cloned.unit, distance: (cloned as any).distance, notes: (cloned as any).notes, block_number: (cloned as any).block_number };
             const { error } = await supabase
               .from("assigned_workout_exercises")
-              .update({ sets, reps, weight, unit, distance, notes: notes || null, block_number: block })
+              .update(payload)
               .eq("id", cloned.id);
             if (error) throw error;
             return { id: cloned.id, prev, table };
@@ -346,7 +356,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       }
       // Capture prev values before update
       const { data: current } = await supabase.from(table).select("sets, reps, weight, unit, distance, notes, block_number").eq("id", id).single();
-      const { error } = await supabase.from(table).update({ sets, reps, weight, unit, distance, notes: notes || null, block_number: block }).eq("id", id);
+      const { error } = await supabase.from(table).update(payload).eq("id", id);
       if (error) throw error;
       return { id, prev: current, table };
     },
@@ -624,6 +634,11 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           set_groups: re.set_groups ?? null,
           notes: re.notes ?? null,
           rest_seconds: re.rest_seconds ?? null,
+          workout_type: re.workout_type ?? "strength",
+          duration_seconds: re.duration_seconds ?? null,
+          distance_meters: re.distance_meters ?? null,
+          micro_pause: re.micro_pause ?? null,
+          macro_pause: re.macro_pause ?? null,
           order_index: i,
           block_number: nextBlock,
           day_number: targetDay,
@@ -681,10 +696,54 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
+  // Tipo del día: se guarda en workout_type de cada ejercicio; todos los del día comparten tipo
+  const derivedDayType = (dayExercises[0]?.workout_type as string) ?? "strength";
+  const dayType = dayTypeSel ?? derivedDayType;
+  const isAerobic = dayType === "aerobic";
+  useEffect(() => { setDayTypeSel(null); }, [selectedDay]);
+
+  const setDayTypeMutation = useMutation({
+    mutationFn: async (type: string) => {
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      let ids = dayExercises.map((e: any) => e.id);
+      if (isOverrideMode && !hasOverrides && dayExercises.length) {
+        await ensureOverrides();
+        const { data } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId!)
+          .eq("day_number", selectedDay);
+        ids = (data ?? []).map((r: any) => r.id);
+      }
+      if (ids.length) {
+        const { error } = await supabase.from(table).update({ workout_type: type } as any).in("id", ids);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: invalidateKey }),
+    onError: () => toast.error("Error al cambiar el tipo de entrenamiento"),
+  });
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-foreground">{routineName}</p>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <p className="text-sm font-semibold text-foreground truncate">{routineName}</p>
+        {editable && (
+          <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+            {([["strength", "Fuerza"], ["aerobic", "Aeróbico"]] as const).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => { setDayTypeSel(val); setDayTypeMutation.mutate(val); }}
+                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                  dayType === val ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {totalDays > 1 && (
@@ -835,6 +894,21 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                         {isEditing ? (
                           <div className="flex flex-col gap-1.5 flex-1">
                             <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
+                            {isAerobic ? (
+                              /* Métricas aeróbicas: Series · Tiempo · Distancia · Micro/Macro pausa */
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <Input type="number" className="w-12 h-7 text-xs" value={editSets} onChange={e => setEditSets(e.target.value)} placeholder="0" />
+                                <span className="text-[10px] text-muted-foreground">series</span>
+                                <Input type="number" className="w-14 h-7 text-xs" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="0" />
+                                <span className="text-[10px] text-muted-foreground">seg</span>
+                                <Input type="number" className="w-16 h-7 text-xs" value={editDistanceM} onChange={e => setEditDistanceM(e.target.value)} placeholder="0" />
+                                <span className="text-[10px] text-muted-foreground">m</span>
+                                <span className="text-[10px] text-muted-foreground ml-1">micro</span>
+                                <Input type="number" className="w-12 h-7 text-xs" value={editMicro} onChange={e => setEditMicro(e.target.value)} placeholder="0" />
+                                <span className="text-[10px] text-muted-foreground">macro</span>
+                                <Input type="number" className="w-12 h-7 text-xs" value={editMacro} onChange={e => setEditMacro(e.target.value)} placeholder="0" />
+                              </div>
+                            ) : (
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <Input type="number" className="w-14 h-7 text-xs" value={editSets} onChange={e => setEditSets(e.target.value)} placeholder="S" />
                               <span className="text-xs text-muted-foreground">×</span>
@@ -860,6 +934,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 </>
                               )}
                             </div>
+                            )}
                             {/* Selector de bloque — mover el ejercicio de bloque sin borrarlo */}
                             <div className="flex items-center gap-1 mt-1 flex-wrap">
                               <span className="text-[10px] text-muted-foreground">Bloque:</span>
@@ -890,6 +965,12 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 distance: editUnit !== "kg" && editDistance ? parseFloat(editDistance) : null,
                                 notes: editNotes || null,
                                 block: editBlock,
+                                ...(isAerobic ? { aerobic: {
+                                  duration_seconds: editDuration ? parseFloat(editDuration) : null,
+                                  distance_meters: editDistanceM ? parseFloat(editDistanceM) : null,
+                                  micro_pause: editMicro ? parseFloat(editMicro) : null,
+                                  macro_pause: editMacro ? parseFloat(editMacro) : null,
+                                } } : {}),
                               })}>
                                 <Save className="h-3 w-3 text-primary" />
                               </Button>
@@ -930,10 +1011,19 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditDistance(re.distance != null ? String(re.distance) : "");
                                 setEditNotes(re.notes ?? "");
                                 setEditBlock(re.block_number ?? 1);
+                                setEditDuration(re.duration_seconds != null ? String(re.duration_seconds) : "");
+                                setEditDistanceM(re.distance_meters != null ? String(re.distance_meters) : "");
+                                setEditMicro(re.micro_pause != null ? String(re.micro_pause) : "");
+                                setEditMacro(re.macro_pause != null ? String(re.macro_pause) : "");
                               }}
                             >
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
-                              {re.set_groups?.length ? (
+                              {re.workout_type === "aerobic" ? (
+                                <p className="text-[10px] text-muted-foreground">
+                                  {re.sets ? `${re.sets} ser` : ""}{re.duration_seconds ? ` · ${re.duration_seconds}seg` : ""}{re.distance_meters ? ` · ${re.distance_meters}m` : ""}{re.micro_pause ? ` · micro ${re.micro_pause}s` : ""}{re.macro_pause ? ` · macro ${re.macro_pause}s` : ""}
+                                  {!re.sets && !re.duration_seconds && !re.distance_meters ? "Aeróbico — tocá para editar" : ""}
+                                </p>
+                              ) : re.set_groups?.length ? (
                                 re.set_groups.map((g: any, i: number) => (
                                   <p key={i} className="text-[10px] text-muted-foreground">
                                     {g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}{re.distance ? ` × ${re.distance}${re.unit ?? ""}` : ""}

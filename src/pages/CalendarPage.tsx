@@ -378,6 +378,11 @@ export default function CalendarPage() {
               rest_seconds: ex.rest_seconds,
               set_groups: ex.set_groups ?? null,
               notes: ex.notes ?? null, // copiar también el comentario de cada ejercicio
+              workout_type: ex.workout_type ?? "strength",
+              duration_seconds: ex.duration_seconds ?? null,
+              distance_meters: ex.distance_meters ?? null,
+              micro_pause: ex.micro_pause ?? null,
+              macro_pause: ex.macro_pause ?? null,
             });
           }
         }
@@ -454,6 +459,11 @@ export default function CalendarPage() {
           rest_seconds: ex.rest_seconds,
           set_groups: ex.set_groups ?? null,
           notes: null, // los comentarios NO se copian: el día nuevo arranca sin notas
+          workout_type: ex.workout_type ?? "strength",
+          duration_seconds: ex.duration_seconds ?? null,
+          distance_meters: ex.distance_meters ?? null,
+          micro_pause: ex.micro_pause ?? null,
+          macro_pause: ex.macro_pause ?? null,
         }));
         await supabase.from("assigned_workout_exercises").insert(copies);
       }
