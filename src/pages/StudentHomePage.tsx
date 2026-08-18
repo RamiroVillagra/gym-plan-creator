@@ -342,7 +342,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
   });
 
   const logSet = useMutation({
-    mutationFn: async (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => {
+    mutationFn: async (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number; duration_done?: number; distance_done?: number }) => {
       const { error } = await supabase.from("workout_logs").upsert(
         { ...params, assigned_workout_id: workout.id, completed: true },
         { onConflict: "assigned_workout_id,exercise_id,set_number" }
@@ -371,6 +371,9 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
             set_number: s.set_number,
             reps_done: s.reps_done,
             weight_used: s.weight_used,
+            // aeróbico: solo presentes para ejercicios aeróbicos (undefined se omite al serializar)
+            duration_done: (s as any).duration_done,
+            distance_done: (s as any).distance_done,
             completed: true,
           });
         }
@@ -543,7 +546,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   coachNotes?: string | null;
   exerciseId: string; existingLogs: any[]; prevLogs: any[];
-  onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number }) => void;
+  onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number; duration_done?: number; distance_done?: number }) => void;
   // Aeróbico (no afecta a Fuerza)
   workoutType?: string; duration?: number | null; distanceM?: number | null; micro?: number | null; macro?: number | null;
 }, ref: any) {
@@ -569,22 +572,53 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   // Comparamos contra esto, no contra el plan, para no confundir prevLogs con modificaciones
   const initialSetsRef = useRef(localSets);
 
+  // Estado AERÓBICO: tiempo/distancia realizados por serie (pre-relleno con el plan o el log)
+  const [aeroSets, setAeroSets] = useState(
+    Array.from({ length: sets ?? 1 }, (_, i) => {
+      const log = existingLogs.find((l: any) => l.set_number === i + 1);
+      return {
+        duration: log?.duration_done?.toString() ?? (duration != null ? String(duration) : ""),
+        distance: log?.distance_done?.toString() ?? (distanceM != null ? String(distanceM) : ""),
+      };
+    })
+  );
+  const initialAeroRef = useRef(aeroSets);
+
   useImperativeHandle(ref, () => ({
     exerciseId,
-    getSets: () => localSets.map((s, i) => {
-      const pReps   = parseInt(s.reps);
-      const pWeight = parseFloat(s.weightDone);
-      return {
-        set_number:   i + 1,
-        reps_done:    isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps,
-        weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
-      };
-    }),
+    getSets: () => {
+      if (workoutType === "aerobic") {
+        return aeroSets.map((s, i) => ({
+          set_number:  i + 1,
+          reps_done:   0,
+          weight_used: 0,
+          duration_done: s.duration ? parseFloat(s.duration) : (duration ?? 0),
+          distance_done: s.distance ? parseFloat(s.distance) : (distanceM ?? 0),
+        }));
+      }
+      return localSets.map((s, i) => {
+        const pReps   = parseInt(s.reps);
+        const pWeight = parseFloat(s.weightDone);
+        return {
+          set_number:   i + 1,
+          reps_done:    isNaN(pReps)   ? (allSets[i]?.targetReps   ?? 0) : pReps,
+          weight_used:  isNaN(pWeight) ? (allSets[i]?.targetWeight  ?? 0) : pWeight,
+        };
+      });
+    },
     // True solo si el usuario cambió algo respecto a lo que estaba pre-relleno al abrir
-    hasModifications: () => localSets.some((s, i) =>
-      s.reps       !== initialSetsRef.current[i]?.reps ||
-      s.weightDone !== initialSetsRef.current[i]?.weightDone
-    ),
+    hasModifications: () => {
+      if (workoutType === "aerobic") {
+        return aeroSets.some((s, i) =>
+          s.duration !== initialAeroRef.current[i]?.duration ||
+          s.distance !== initialAeroRef.current[i]?.distance
+        );
+      }
+      return localSets.some((s, i) =>
+        s.reps       !== initialSetsRef.current[i]?.reps ||
+        s.weightDone !== initialSetsRef.current[i]?.weightDone
+      );
+    },
   }));
 
   // ── Vista AERÓBICA (misma tarjeta que Fuerza, con datos aeróbicos) ──
@@ -617,17 +651,37 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           {macro ? <span>Macro pausa: <span className="text-foreground font-medium">{macro}s</span></span> : null}
         </div>
 
-        {/* Una fila por serie, con check para marcarla hecha */}
+        {/* Encabezados */}
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[10px] text-muted-foreground w-14" />
+          <span className="text-[10px] text-muted-foreground w-16 text-center">Tiempo (s)</span>
+          <span className="text-[10px] text-muted-foreground w-16 text-center">Dist. (m)</span>
+          <span className="w-7" />
+        </div>
+        {/* Una fila por serie: el alumno registra tiempo y distancia hechos */}
         <div className="space-y-2">
-          {Array.from({ length: sets ?? 1 }, (_, i) => {
+          {aeroSets.map((s, i) => {
             const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
             return (
-              <div key={i} className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground w-16">Serie {i + 1}</span>
-                <span className="flex-1 text-xs text-muted-foreground">
-                  {duration ? `${duration}s` : ""}{duration && distanceM ? " · " : ""}{distanceM ? `${distanceM}m` : ""}
-                </span>
-                <button onClick={() => onLogSet({ exercise_id: exerciseId, set_number: i + 1, reps_done: 0, weight_used: 0 })}>
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground w-14">Serie {i + 1}</span>
+                <Input
+                  type="number" inputMode="numeric" placeholder="seg"
+                  className="w-16 h-10 text-base text-center"
+                  value={s.duration}
+                  onChange={e => { const n = [...aeroSets]; n[i].duration = e.target.value; setAeroSets(n); }}
+                />
+                <Input
+                  type="number" inputMode="numeric" placeholder="m"
+                  className="w-16 h-10 text-base text-center"
+                  value={s.distance}
+                  onChange={e => { const n = [...aeroSets]; n[i].distance = e.target.value; setAeroSets(n); }}
+                />
+                <button onClick={() => onLogSet({
+                  exercise_id: exerciseId, set_number: i + 1, reps_done: 0, weight_used: 0,
+                  duration_done: s.duration ? parseFloat(s.duration) : (duration ?? 0),
+                  distance_done: s.distance ? parseFloat(s.distance) : (distanceM ?? 0),
+                })}>
                   {isLogged
                     ? <CheckCircle2 className="h-7 w-7 text-primary" />
                     : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />

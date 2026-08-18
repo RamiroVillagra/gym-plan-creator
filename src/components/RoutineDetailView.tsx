@@ -148,6 +148,11 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const hasOverrides = isOverrideMode && overrideExercises && overrideExercises.length > 0;
   const routineExercises = hasOverrides ? overrideExercises : baseExercises;
 
+  // Tipo del día (fuerza/aeróbico) — se calcula temprano para poder filtrar el picker por tipo
+  const _currentDayEx = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
+  const dayType = dayTypeSel ?? ((_currentDayEx[0]?.workout_type as string) ?? "strength");
+  const isAerobic = dayType === "aerobic";
+
   const ensureOverrides = useCallback(async () => {
     if (!isOverrideMode || hasOverrides) return;
     if (!routineId || !baseExercises?.length) return;
@@ -190,7 +195,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       const workoutIds = clientWorkouts.map(w => w.id);
       const { data: logs } = await supabase
         .from("workout_logs")
-        .select("assigned_workout_id, set_number, reps_done, weight_used, distance_done")
+        .select("assigned_workout_id, set_number, reps_done, weight_used, distance_done, duration_done")
         .in("assigned_workout_id", workoutIds)
         .eq("exercise_id", historyExerciseId!)
         .eq("completed", true)
@@ -237,15 +242,16 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     ? ["assigned-workout-exercises", assignedWorkoutId]
     : ["routine-exercises", routineId];
 
-  // Filtrar ejercicios por categoría y búsqueda
+  // Filtrar ejercicios por tipo del día (fuerza/aeróbico), categoría y búsqueda
   const filteredExercises = exercises?.filter(ex => {
+    const matchType = (((ex as any).type as string) ?? "strength") === dayType;
     const matchCategory = filterCategory
       ? (ex as any).category_id === filterCategory
       : true;
     const matchSearch = filterSearch
       ? ex.name.toLowerCase().includes(filterSearch.toLowerCase())
       : true;
-    return matchCategory && matchSearch;
+    return matchType && matchCategory && matchSearch;
   }) ?? [];
 
   const addExercise = useMutation({
@@ -479,7 +485,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         name: newExName,
         category_id: newExCategoryId || null,
         muscle_group: catName,
-      }).select().single();
+        type: dayType, // el ejercicio nuevo hereda el tipo del día (fuerza/aeróbico)
+      } as any).select().single();
       if (error) throw error;
       return data;
     },
@@ -696,10 +703,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
-  // Tipo del día: se guarda en workout_type de cada ejercicio; todos los del día comparten tipo
-  const derivedDayType = (dayExercises[0]?.workout_type as string) ?? "strength";
-  const dayType = dayTypeSel ?? derivedDayType;
-  const isAerobic = dayType === "aerobic";
+  // (dayType / isAerobic se calculan más arriba, junto a routineExercises)
   useEffect(() => { setDayTypeSel(null); }, [selectedDay]);
 
   const setDayTypeMutation = useMutation({
@@ -1183,7 +1187,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                   <div className="flex flex-wrap gap-1">
                                     {session.logs.map((l: any, j: number) => (
                                       <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-card border border-border text-foreground">
-                                        S{l.set_number}: {l.reps_done ?? "—"} rep{l.weight_used ? ` @ ${l.weight_used}kg` : ""}{l.distance_done ? ` × ${l.distance_done}${re.unit ?? ""}` : ""}
+                                        {re.workout_type === "aerobic"
+                                          ? `S${l.set_number}: ${l.duration_done ? `${l.duration_done}s` : ""}${l.duration_done && l.distance_done ? " · " : ""}${l.distance_done ? `${l.distance_done}m` : ""}${!l.duration_done && !l.distance_done ? "hecho" : ""}`
+                                          : <>S{l.set_number}: {l.reps_done ?? "—"} rep{l.weight_used ? ` @ ${l.weight_used}kg` : ""}{l.distance_done ? ` × ${l.distance_done}${re.unit ?? ""}` : ""}</>}
                                       </span>
                                     ))}
                                   </div>
