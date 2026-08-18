@@ -152,6 +152,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const _currentDayEx = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const dayType = dayTypeSel ?? ((_currentDayEx[0]?.workout_type as string) ?? "strength");
   const isAerobic = dayType === "aerobic";
+  // Categorías del tipo del día (fuerza/aeróbico) — se calcula abajo tras cargar `categories`
 
   const ensureOverrides = useCallback(async () => {
     if (!isOverrideMode || hasOverrides) return;
@@ -241,6 +242,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const invalidateKey = isOverrideMode
     ? ["assigned-workout-exercises", assignedWorkoutId]
     : ["routine-exercises", routineId];
+
+  // Categorías del tipo del día (en un día aeróbico no aparecen las categorías de fuerza)
+  const dayCategories = categories?.filter(c => (((c as any).type as string) ?? "strength") === dayType) ?? [];
 
   // Filtrar ejercicios por tipo del día (fuerza/aeróbico), categoría y búsqueda
   const filteredExercises = exercises?.filter(ex => {
@@ -1253,7 +1257,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                     }}
                   >
                     <option value="">Todas las categorías</option>
-                    {categories?.map(c => (
+                    {dayCategories.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
@@ -1359,7 +1363,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                     onChange={e => setNewExCategoryId(e.target.value)}
                   >
                     <option value="">Sin categoría</option>
-                    {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {dayCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <Button

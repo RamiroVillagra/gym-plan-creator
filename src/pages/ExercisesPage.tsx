@@ -12,6 +12,7 @@ import VideoModal from "@/components/VideoModal";
 
 export default function ExercisesPage() {
   const queryClient = useQueryClient();
+  const [libType, setLibType] = useState<"strength" | "aerobic">("strength"); // sección Fuerza / Aeróbico
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [name, setName] = useState("");
@@ -64,7 +65,7 @@ export default function ExercisesPage() {
   // Category mutations
   const addCategory = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("exercise_categories").insert({ name: newCatName });
+      const { error } = await supabase.from("exercise_categories").insert({ name: newCatName, type: libType } as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -108,6 +109,7 @@ export default function ExercisesPage() {
         muscle_group: categoryId ? categories?.find(c => c.id === categoryId)?.name ?? null : null,
         description: description || null,
         video_url: videoUrl || null,
+        type: libType,
       } as any);
       if (error) throw error;
     },
@@ -205,13 +207,20 @@ export default function ExercisesPage() {
     [exercises, deleteConfirm?.id, replaceSearch]
   );
 
+  // Categorías de la sección actual (fuerza/aeróbico)
+  const libCategories = useMemo(
+    () => categories?.filter(c => (((c as any).type as string) ?? "strength") === libType) ?? [],
+    [categories, libType]
+  );
+
   const filtered = useMemo(() =>
     exercises?.filter(e =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
+      (((e as any).type as string) ?? "strength") === libType &&
+      (e.name.toLowerCase().includes(search.toLowerCase()) ||
       ((e as any).exercise_categories?.name?.toLowerCase().includes(search.toLowerCase())) ||
-      (e.muscle_group?.toLowerCase().includes(search.toLowerCase()))
+      (e.muscle_group?.toLowerCase().includes(search.toLowerCase())))
     ),
-    [exercises, search]
+    [exercises, search, libType]
   );
 
   // Group by category — memoized so it only recomputes when exercises or categories change
@@ -226,7 +235,7 @@ export default function ExercisesPage() {
     });
 
     // Sort: named categories first, then uncategorized
-    categories?.forEach(cat => {
+    libCategories.forEach(cat => {
       if (catMap.has(cat.id)) {
         result.push({ catId: cat.id, catName: cat.name, items: catMap.get(cat.id) });
         catMap.delete(cat.id);
@@ -242,7 +251,7 @@ export default function ExercisesPage() {
     });
 
     return result;
-  }, [filtered, categories]);
+  }, [filtered, libCategories]);
 
   const toggleCat = (catId: string) => {
     setCollapsedCats(prev => {
@@ -288,11 +297,28 @@ export default function ExercisesPage() {
   return (
     <div className="animate-fade-in">
       <VideoModal url={watchingUrl} onClose={() => setWatchingUrl(null)} />
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <div>
           <h1 className="text-3xl font-heading font-bold">Ejercicios</h1>
           <p className="text-muted-foreground">Biblioteca de ejercicios disponibles</p>
         </div>
+        {/* Sección Fuerza / Aeróbico — separa ejercicios y categorías por tipo */}
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          {([["strength", "Fuerza"], ["aerobic", "Aeróbico"]] as const).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => { setLibType(val); setSearch(""); setCategoryId(""); }}
+              className={`px-4 py-1.5 text-sm font-semibold transition-colors ${
+                libType === val ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-end mb-6">
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setCatOpen(true)}>
             <Tag className="h-4 w-4 mr-2" />Categorías
@@ -311,7 +337,7 @@ export default function ExercisesPage() {
                   onChange={e => setCategoryId(e.target.value)}
                 >
                   <option value="">Categoría (opcional)</option>
-                  {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {libCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 <Input placeholder="Descripción (opcional)" value={description} onChange={e => setDescription(e.target.value)} />
                 <Input placeholder="Link de YouTube (opcional)" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} type="url" />
@@ -371,7 +397,7 @@ export default function ExercisesPage() {
               onChange={e => setEditCategoryId(e.target.value)}
             >
               <option value="">Sin categoría</option>
-              {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {libCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <Input placeholder="Descripción" value={editDescription} onChange={e => setEditDescription(e.target.value)} />
             <Input placeholder="Link de YouTube (opcional)" value={editVideoUrl} onChange={e => setEditVideoUrl(e.target.value)} type="url" />
@@ -506,7 +532,7 @@ export default function ExercisesPage() {
               </Button>
             </div>
             <div className="space-y-2 max-h-60 overflow-auto">
-              {categories?.map(cat => (
+              {libCategories.map(cat => (
                 <div key={cat.id} className="flex items-center justify-between bg-secondary/50 rounded-lg px-3 py-2">
                   {editingCatId === cat.id ? (
                     <div className="flex items-center gap-2 flex-1">
@@ -539,7 +565,7 @@ export default function ExercisesPage() {
                   )}
                 </div>
               ))}
-              {!categories?.length && <p className="text-sm text-muted-foreground text-center py-2">No hay categorías</p>}
+              {!libCategories.length && <p className="text-sm text-muted-foreground text-center py-2">No hay categorías</p>}
             </div>
           </div>
         </DialogContent>
