@@ -594,7 +594,7 @@ export default function CalendarPage() {
       const ids = workouts!.map((w: any) => w.id);
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("assigned_workout_id, exercises(name), block_number, order_index")
+        .select("assigned_workout_id, exercises(name), block_number, order_index, workout_type")
         .in("assigned_workout_id", ids)
         .order("block_number")
         .order("order_index");
@@ -602,6 +602,15 @@ export default function CalendarPage() {
       return data;
     },
   });
+
+  // Workouts cuyos ejercicios son aeróbicos → se muestran en otro color
+  const aerobicWorkoutIds = useMemo(() => {
+    const s = new Set<string>();
+    (workoutExercises ?? []).forEach((e: any) => {
+      if (e.workout_type === "aerobic") s.add(e.assigned_workout_id);
+    });
+    return s;
+  }, [workoutExercises]);
 
 
   const [savingDay, setSavingDay] = useState<string | null>(null);
@@ -920,6 +929,7 @@ export default function CalendarPage() {
           date={currentDate}
           workouts={workouts?.filter((w: any) => w.workout_date === format(currentDate, "yyyy-MM-dd")) ?? []}
           loggedWorkoutIds={loggedWorkoutIds}
+          aerobicWorkoutIds={aerobicWorkoutIds}
           role={role}
           isClientFiltered={isClientFiltered}
           onAdd={() => {
@@ -1022,7 +1032,9 @@ export default function CalendarPage() {
                       return (
                         <div
                           key={w.id}
-                          className="bg-secondary/50 rounded px-1.5 py-0.5 group text-[10px] cursor-pointer"
+                          className={`rounded px-1.5 py-0.5 group text-[10px] cursor-pointer ${
+                            aerobicWorkoutIds.has(w.id) ? "bg-sky-500/15 border border-sky-500/40" : "bg-secondary/50"
+                          }`}
                           onClick={e => {
                             e.stopPropagation();
                             setDetailWorkout(w);
@@ -1667,8 +1679,8 @@ export default function CalendarPage() {
   );
 }
 
-function DayView({ date, workouts, loggedWorkoutIds, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
-  date: Date; workouts: any[]; loggedWorkoutIds?: Set<string>; role: string | null; isClientFiltered: boolean;
+function DayView({ date, workouts, loggedWorkoutIds, aerobicWorkoutIds, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
+  date: Date; workouts: any[]; loggedWorkoutIds?: Set<string>; aerobicWorkoutIds?: Set<string>; role: string | null; isClientFiltered: boolean;
   onAdd: () => void; onDelete: (id: string) => void; onEdit: (w: any) => void; onViewDetail: (w: any) => void;
   onSaveDay: () => void; isSavingDay: boolean;
 }) {
@@ -1689,7 +1701,9 @@ function DayView({ date, workouts, loggedWorkoutIds, role, isClientFiltered, onA
           {workouts.map((w: any) => (
             <div
               key={w.id}
-              className="flex items-center justify-between bg-secondary/50 rounded-lg px-4 py-3 cursor-pointer hover:bg-secondary/70 transition-colors"
+              className={`flex items-center justify-between rounded-lg px-4 py-3 cursor-pointer transition-colors ${
+                aerobicWorkoutIds?.has(w.id) ? "bg-sky-500/15 border border-sky-500/40 hover:bg-sky-500/20" : "bg-secondary/50 hover:bg-secondary/70"
+              }`}
               onClick={() => onViewDetail(w)}
             >
               <div className="flex-1 min-w-0">

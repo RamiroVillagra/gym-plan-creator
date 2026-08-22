@@ -627,7 +627,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
     const aUnit = distanceM != null ? "m" : "seg";
     const planVal = distanceM ?? duration ?? null;
     return (
-      <div className="bg-card border border-border rounded-xl p-4 mb-3">
+      <div className="bg-sky-500/5 border border-sky-500/30 rounded-xl p-4 mb-3">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-2">
@@ -643,7 +643,10 @@ const ExerciseCard = forwardRef(function ExerciseCard({
               <p className="text-xs text-amber-500 mt-1 italic">💬 {coachNotes}</p>
             )}
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{sets}×{reps ?? "?"}</span>
+          <div className="flex flex-col items-end shrink-0 gap-0.5">
+            <span className="text-[9px] font-bold uppercase tracking-wide text-sky-500 bg-sky-500/10 px-1.5 py-0.5 rounded-full">Aeróbico</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{sets}×{reps ?? "?"}</span>
+          </div>
         </div>
 
         {/* Datos del plan aeróbico */}
@@ -684,8 +687,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
                   distance_done: aUnit === "m" ? (s.distance ? parseFloat(s.distance) : (distanceM ?? 0)) : 0,
                 })}>
                   {isLogged
-                    ? <CheckCircle2 className="h-7 w-7 text-primary" />
-                    : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />
+                    ? <CheckCircle2 className="h-7 w-7 text-sky-500" />
+                    : <Circle className="h-7 w-7 text-muted-foreground hover:text-sky-500" />
                   }
                 </button>
               </div>
