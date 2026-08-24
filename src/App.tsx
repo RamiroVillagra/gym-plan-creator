@@ -23,6 +23,7 @@ const StudentProfilePage = lazy(() => import("./pages/StudentProfilePage"));
 const KioskPage        = lazy(() => import("./pages/KioskPage"));
 const StatsPage        = lazy(() => import("./pages/StatsPage"));
 const BlocksPage       = lazy(() => import("./pages/BlocksPage"));
+const MaterialsPage    = lazy(() => import("./pages/MaterialsPage"));
 const NotFound         = lazy(() => import("./pages/NotFound"));
 
 // Global QueryClient configuration
@@ -96,6 +97,7 @@ function ProtectedRoutes() {
           <Route path="/kiosk"   element={<KioskPage />} />
           <Route path="/stats"   element={<StatsPage />} />
           <Route path="/bloques" element={<BlocksPage />} />
+          <Route path="/materiales" element={<MaterialsPage />} />
           <Route path="*"        element={<NotFound />} />
         </Routes>
       </Suspense>
