@@ -668,20 +668,33 @@ export default function CalendarPage() {
 
         const toInsert: any[] = [];
         for (const ex of exercises) {
-          const totalSets = ex.sets ?? 1;
-          for (let s = 1; s <= totalSets; s++) {
-            const alreadyLogged = existingLogs?.some(
-              (l: any) => l.exercise_id === ex.exercise_id && l.set_number === s
-            );
-            if (!alreadyLogged) {
-              toInsert.push({
-                assigned_workout_id: workout.id,
-                exercise_id: ex.exercise_id,
-                set_number: s,
-                reps_done: ex.reps ?? 0,
-                weight_used: ex.weight ?? 0,
-                completed: true,
-              });
+          // Expandir series divididas (set_groups) igual que las cards del alumno/kiosco:
+          // cada grupo aporta g.sets series con su propio reps/weight. Sin set_groups,
+          // se usa el plano ex.sets × ex.reps @ ex.weight. Antes se ignoraba set_groups
+          // y se registraba el valor plano (ej. 37) en vez del planificado (ej. 40/42).
+          const groups: { sets: number; reps: number | null; weight: number | null }[] =
+            Array.isArray(ex.set_groups) && ex.set_groups.length
+              ? ex.set_groups
+              : [{ sets: ex.sets ?? 1, reps: ex.reps ?? 0, weight: ex.weight ?? 0 }];
+
+          let setNum = 0;
+          for (const g of groups) {
+            const gSets = g.sets ?? 1;
+            for (let i = 0; i < gSets; i++) {
+              setNum++;
+              const alreadyLogged = existingLogs?.some(
+                (l: any) => l.exercise_id === ex.exercise_id && l.set_number === setNum
+              );
+              if (!alreadyLogged) {
+                toInsert.push({
+                  assigned_workout_id: workout.id,
+                  exercise_id: ex.exercise_id,
+                  set_number: setNum,
+                  reps_done: g.reps ?? 0,
+                  weight_used: g.weight ?? 0,
+                  completed: true,
+                });
+              }
             }
           }
         }
