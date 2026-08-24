@@ -11,11 +11,21 @@ import { es } from "date-fns/locale";
 // turno agrupados por bloque, con cuántos alumnos usan cada uno (para detectar
 // embotellamiento). NO modifica nada del Modo Sala ni del registro.
 
-type OccItem = { block: number; name: string; count: number };
+type OccItem = { block: number; name: string; count: number; categoryId: string | null };
 
 export default function MaterialsPage() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
+
+  const { data: categories } = useQuery({
+    queryKey: ["exercise-categories"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data } = await supabase.from("exercise_categories").select("id, name").order("name");
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
 
   const { data: turnos } = useQuery({
     queryKey: ["kiosk-groups"],
@@ -59,7 +69,7 @@ export default function MaterialsPage() {
       // 3. Ejercicios modificados (overrides) de esos entrenamientos
       const { data: overrides } = await supabase
         .from("assigned_workout_exercises")
-        .select("assigned_workout_id, block_number, exercises(name)")
+        .select("assigned_workout_id, block_number, exercises(name, category_id)")
         .in("assigned_workout_id", workoutIds);
 
       // 4. Entrenamientos sin overrides → ejercicios de la rutina base
@@ -70,18 +80,19 @@ export default function MaterialsPage() {
       if (routineIds.length) {
         const { data: base } = await supabase
           .from("routine_exercises")
-          .select("routine_id, day_number, block_number, exercises(name)")
+          .select("routine_id, day_number, block_number, exercises(name, category_id)")
           .in("routine_id", routineIds as string[]);
         baseEx = base ?? [];
       }
 
-      // 5. Lista unificada {block, exerciseName, clientId}
-      const rows: { block: number; name: string; clientId: string }[] = [];
+      // 5. Lista unificada {block, exerciseName, clientId, categoryId}
+      const rows: { block: number; name: string; clientId: string; categoryId: string | null }[] = [];
       for (const o of (overrides ?? []) as any[]) {
         rows.push({
           block: o.block_number ?? 1,
           name: o.exercises?.name ?? "—",
           clientId: workoutClient.get(o.assigned_workout_id) ?? "",
+          categoryId: o.exercises?.category_id ?? null,
         });
       }
       for (const w of missing as any[]) {
@@ -89,19 +100,19 @@ export default function MaterialsPage() {
           (b) => b.routine_id === w.routine_id && (b.day_number ?? 1) === (w.day_number ?? 1)
         );
         for (const b of base) {
-          rows.push({ block: b.block_number ?? 1, name: b.exercises?.name ?? "—", clientId: w.client_id });
+          rows.push({ block: b.block_number ?? 1, name: b.exercises?.name ?? "—", clientId: w.client_id, categoryId: b.exercises?.category_id ?? null });
         }
       }
 
       // 6. Contar alumnos distintos por (bloque, ejercicio) y ordenar por demanda
-      const byKey = new Map<string, { block: number; name: string; set: Set<string> }>();
+      const byKey = new Map<string, { block: number; name: string; categoryId: string | null; set: Set<string> }>();
       for (const r of rows) {
         const key = `${r.block}__${r.name}`;
-        if (!byKey.has(key)) byKey.set(key, { block: r.block, name: r.name, set: new Set() });
+        if (!byKey.has(key)) byKey.set(key, { block: r.block, name: r.name, categoryId: r.categoryId, set: new Set() });
         byKey.get(key)!.set.add(r.clientId);
       }
       const items: OccItem[] = [...byKey.values()]
-        .map(v => ({ block: v.block, name: v.name, count: v.set.size }))
+        .map(v => ({ block: v.block, name: v.name, count: v.set.size, categoryId: v.categoryId }))
         .sort((a, b) => b.count - a.count || a.block - b.block || a.name.localeCompare(b.name));
 
       return { memberCount: clientIds.length, items };
@@ -114,7 +125,7 @@ export default function MaterialsPage() {
   const textColor = (count: number) =>
     count >= 3 ? "text-destructive" : count === 2 ? "text-amber-500" : "text-muted-foreground";
 
-  const items = overview?.items ?? [];
+  const items = (overview?.items ?? []).filter(i => !filterCategory || i.categoryId === filterCategory);
   const maxCount = Math.max(1, ...items.map(i => i.count));
   const hotspots = items.filter(i => i.count >= 3);
   const watch = items.filter(i => i.count === 2);
@@ -126,9 +137,19 @@ export default function MaterialsPage() {
           <Boxes className="h-7 w-7 text-primary" />
           <h1 className="text-3xl font-heading font-bold">Materiales</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 h-9" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={filterCategory}
+            onChange={e => setFilterCategory(e.target.value)}
+            className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+          >
+            <option value="">Todas las categorías</option>
+            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 h-9" />
+          </div>
         </div>
       </div>
       <p className="text-muted-foreground mb-4 text-sm">
@@ -164,7 +185,9 @@ export default function MaterialsPage() {
             <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
           ) : !items.length ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              Este turno no tiene entrenamientos asignados para este día.
+              {filterCategory && (overview?.items.length ?? 0) > 0
+                ? "No hay ejercicios de esa categoría en este turno/día."
+                : "Este turno no tiene entrenamientos asignados para este día."}
             </p>
           ) : (
             <div className="space-y-4">
