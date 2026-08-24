@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Boxes, Users, CalendarDays } from "lucide-react";
+import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -11,7 +11,7 @@ import { es } from "date-fns/locale";
 // turno agrupados por bloque, con cuántos alumnos usan cada uno (para detectar
 // embotellamiento). NO modifica nada del Modo Sala ni del registro.
 
-type BlockOverview = { block: number; exercises: { name: string; count: number }[] };
+type OccItem = { block: number; name: string; count: number };
 
 export default function MaterialsPage() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -34,7 +34,7 @@ export default function MaterialsPage() {
   const { data: overview, isLoading } = useQuery({
     queryKey: ["materials-overview", selectedTurno, date],
     enabled: !!selectedTurno,
-    queryFn: async (): Promise<{ memberCount: number; blocks: BlockOverview[] }> => {
+    queryFn: async (): Promise<{ memberCount: number; items: OccItem[] }> => {
       // 1. Alumnos del turno
       const { data: members } = await (supabase as any)
         .from("kiosk_group_members")
@@ -43,7 +43,7 @@ export default function MaterialsPage() {
       const clientIds: string[] = (members ?? [])
         .map((m: any) => m.clients?.id)
         .filter(Boolean);
-      if (!clientIds.length) return { memberCount: 0, blocks: [] };
+      if (!clientIds.length) return { memberCount: 0, items: [] };
 
       // 2. Entrenamientos del día para esos alumnos
       const { data: workouts } = await supabase
@@ -51,7 +51,7 @@ export default function MaterialsPage() {
         .select("id, client_id, routine_id, day_number")
         .eq("workout_date", date)
         .in("client_id", clientIds);
-      if (!workouts?.length) return { memberCount: clientIds.length, blocks: [] };
+      if (!workouts?.length) return { memberCount: clientIds.length, items: [] };
 
       const workoutIds = workouts.map((w: any) => w.id);
       const workoutClient = new Map<string, string>(workouts.map((w: any) => [w.id, w.client_id]));
@@ -93,34 +93,31 @@ export default function MaterialsPage() {
         }
       }
 
-      // 6. Agrupar por bloque → ejercicio → alumnos distintos
-      const blockMap = new Map<number, Map<string, Set<string>>>();
+      // 6. Contar alumnos distintos por (bloque, ejercicio) y ordenar por demanda
+      const byKey = new Map<string, { block: number; name: string; set: Set<string> }>();
       for (const r of rows) {
-        if (!blockMap.has(r.block)) blockMap.set(r.block, new Map());
-        const exMap = blockMap.get(r.block)!;
-        if (!exMap.has(r.name)) exMap.set(r.name, new Set());
-        exMap.get(r.name)!.add(r.clientId);
+        const key = `${r.block}__${r.name}`;
+        if (!byKey.has(key)) byKey.set(key, { block: r.block, name: r.name, set: new Set() });
+        byKey.get(key)!.set.add(r.clientId);
       }
-      const blocks: BlockOverview[] = [...blockMap.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([block, exMap]) => ({
-          block,
-          exercises: [...exMap.entries()]
-            .map(([name, set]) => ({ name, count: set.size }))
-            .sort((a, b) => b.count - a.count),
-        }));
+      const items: OccItem[] = [...byKey.values()]
+        .map(v => ({ block: v.block, name: v.name, count: v.set.size }))
+        .sort((a, b) => b.count - a.count || a.block - b.block || a.name.localeCompare(b.name));
 
-      return { memberCount: clientIds.length, blocks };
+      return { memberCount: clientIds.length, items };
     },
   });
 
   // Color según congestión: 1 = ok, 2 = medio, 3+ = alto
-  const congestionClass = (count: number) =>
-    count >= 3
-      ? "bg-destructive/15 border-destructive/40 text-destructive"
-      : count === 2
-      ? "bg-amber-400/15 border-amber-400/40 text-amber-500"
-      : "bg-primary/10 border-primary/25 text-primary";
+  const barColor = (count: number) =>
+    count >= 3 ? "bg-destructive" : count === 2 ? "bg-amber-400" : "bg-primary/70";
+  const textColor = (count: number) =>
+    count >= 3 ? "text-destructive" : count === 2 ? "text-amber-500" : "text-muted-foreground";
+
+  const items = overview?.items ?? [];
+  const maxCount = Math.max(1, ...items.map(i => i.count));
+  const hotspots = items.filter(i => i.count >= 3);
+  const watch = items.filter(i => i.count === 2);
 
   return (
     <div className="animate-fade-in max-w-4xl mx-auto">
@@ -135,7 +132,7 @@ export default function MaterialsPage() {
         </div>
       </div>
       <p className="text-muted-foreground mb-4 text-sm">
-        Ocupación por turno: cuántos alumnos usan cada ejercicio ese día, agrupado por bloque.
+        Qué ejercicios se van a usar más en cada turno ese día — para evitar que se junten en el mismo material.
       </p>
 
       {/* Turnos como pestañas */}
@@ -165,32 +162,53 @@ export default function MaterialsPage() {
 
           {isLoading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
-          ) : !overview?.blocks.length ? (
+          ) : !items.length ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Este turno no tiene entrenamientos asignados para este día.
             </p>
           ) : (
             <div className="space-y-4">
-              {overview.blocks.map(b => (
-                <div key={b.block} className="bg-card border border-border rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-primary uppercase tracking-wider mb-2">Bloque {b.block}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {b.exercises.map((ex, i) => (
-                      <span
-                        key={i}
-                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg border ${congestionClass(ex.count)}`}
-                      >
-                        {ex.name}
-                        <span className="text-[10px] font-bold rounded-full bg-background/60 px-1.5">{ex.count}</span>
-                      </span>
-                    ))}
-                  </div>
+              {/* Alerta de puntos calientes */}
+              {hotspots.length > 0 ? (
+                <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3">
+                  <p className="text-sm font-bold text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="h-4 w-4" />
+                    {hotspots.length} {hotspots.length === 1 ? "punto" : "puntos"} de posible embotellamiento
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hotspots.map(h => `${h.name} (${h.count})`).join(" · ")}
+                  </p>
                 </div>
-              ))}
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground pt-1">
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary/60" /> 1 alumno</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> 2 alumnos</span>
-                <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" /> 3+ (posible embotellamiento)</span>
+              ) : watch.length > 0 ? (
+                <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl p-3">
+                  <p className="text-sm font-semibold text-amber-500">Ojo con: {watch.map(h => `${h.name} (${h.count})`).join(" · ")}</p>
+                </div>
+              ) : (
+                <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                  <p className="text-sm font-semibold text-primary flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" />Sin embotellamientos previstos</p>
+                </div>
+              )}
+
+              {/* Ranking con barras — el más pedido arriba */}
+              <div className="bg-card border border-border rounded-xl divide-y divide-border/60 overflow-hidden">
+                {items.map((it, i) => (
+                  <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm font-medium text-foreground truncate">{it.name}</span>
+                        <span className={`text-sm font-bold shrink-0 ${textColor(it.count)}`}>
+                          {it.count} <span className="text-[10px] font-normal text-muted-foreground">alumno{it.count > 1 ? "s" : ""}</span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className={`h-full rounded-full ${barColor(it.count)}`} style={{ width: `${(it.count / maxCount) * 100}%` }} />
+                        </div>
+                        <span className="text-[9px] text-muted-foreground shrink-0">Bloque {it.block}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
