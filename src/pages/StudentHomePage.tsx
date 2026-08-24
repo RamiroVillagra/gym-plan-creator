@@ -563,7 +563,11 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       const prevLog = prevLogs.find((l: any) => l.set_number === i + 1);
       return {
         reps: log?.reps_done?.toString() ?? s.targetReps?.toString() ?? "",
-        weightDone: log?.weight_used?.toString() ?? prevLog?.weight_used?.toString() ?? s.targetWeight?.toString() ?? "",
+        // Prioridad: log de hoy → peso del PLAN (incl. series divididas) → peso anterior.
+        // El plan del coach manda sobre lo que se hizo la última vez; así, si el alumno
+        // guarda sin tocar nada, se registra el valor planificado (no el de la sesión previa).
+        // El peso anterior sigue visible con el toggle "ver anterior".
+        weightDone: log?.weight_used?.toString() ?? s.targetWeight?.toString() ?? prevLog?.weight_used?.toString() ?? "",
       };
     })
   );
