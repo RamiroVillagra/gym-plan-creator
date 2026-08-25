@@ -594,20 +594,34 @@ function InventoryManager() {
 // ─── Grupos que comparten estación (Fase 2) ─────────────────────────────────
 // Alumnos que comparten un material a la vez por decisión del coach. En la vista
 // "Por material", los del mismo grupo cuentan como uno.
-type ShareGroup = { id: string; name: string };
+type ShareGroup = { id: string; name: string; kiosk_group_id: string | null };
 type ShareMember = { id: string; sharing_group_id: string; client_id: string };
 
 function SharingGroupsManager() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
+  const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [name, setName] = useState("");
   const [addingTo, setAddingTo] = useState<string | null>(null); // grupo al que se está agregando
   const [memberSearch, setMemberSearch] = useState(""); // búsqueda de alumno a agregar
 
+  const { data: turnos } = useQuery({
+    queryKey: ["kiosk-groups"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("kiosk_groups").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+  useEffect(() => {
+    if (!selectedTurno && turnos?.length) setSelectedTurno(turnos[0].id);
+  }, [turnos, selectedTurno]);
+
   const { data: groups, isLoading } = useQuery({
     queryKey: ["sharing-groups"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from("sharing_groups").select("id, name").order("name");
+      const { data, error } = await (supabase as any).from("sharing_groups").select("id, name, kiosk_group_id").order("name");
       if (error) throw error;
       return (data ?? []) as ShareGroup[];
     },
@@ -629,8 +643,25 @@ function SharingGroupsManager() {
       return (data ?? []) as { id: string; name: string }[];
     },
   });
+  // Alumnos del turno seleccionado (solo esos se pueden agregar a sus grupos)
+  const { data: turnoClients } = useQuery({
+    queryKey: ["turno-clients", selectedTurno],
+    enabled: !!selectedTurno,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("kiosk_group_members")
+        .select("clients(id, name)")
+        .eq("kiosk_group_id", selectedTurno);
+      if (error) throw error;
+      return (data ?? [])
+        .map((m: any) => ({ id: m.clients?.id, name: m.clients?.name ?? "—" }))
+        .filter((c: any) => c.id)
+        .sort((a: any, b: any) => a.name.localeCompare(b.name)) as { id: string; name: string }[];
+    },
+  });
 
   const clientName = (id: string) => clients?.find(c => c.id === id)?.name ?? "—";
+  const turnoGroups = (groups ?? []).filter(g => g.kiosk_group_id === selectedTurno);
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sharing-groups"] });
     queryClient.invalidateQueries({ queryKey: ["sharing-group-members"] });
@@ -640,8 +671,8 @@ function SharingGroupsManager() {
   const addGroup = useMutation({
     mutationFn: async () => {
       const n = name.trim();
-      if (!n) throw new Error("empty");
-      const { error } = await (supabase as any).from("sharing_groups").insert({ name: n });
+      if (!n || !selectedTurno) throw new Error("empty");
+      const { error } = await (supabase as any).from("sharing_groups").insert({ name: n, kiosk_group_id: selectedTurno });
       if (error) throw error;
     },
     onSuccess: () => { setName(""); invalidate(); toast.success("Grupo creado"); },
@@ -675,11 +706,30 @@ function SharingGroupsManager() {
   return (
     <div className="max-w-xl">
       <p className="text-muted-foreground mb-4 text-sm">
-        Grupos de alumnos que comparten una estación a propósito. En la vista <span className="font-medium">Por material</span> los
+        Grupos de alumnos que comparten una estación a propósito, organizados por turno. En la vista <span className="font-medium">Por material</span> los
         integrantes de un mismo grupo cuentan como uno, así no se marca como faltante algo que decidiste vos.
       </p>
 
-      {/* Alta de grupo */}
+      {!turnos?.length ? (
+        <p className="text-sm text-muted-foreground">No hay turnos creados. Creá turnos en Modo Sala → Gestionar Turnos.</p>
+      ) : (
+      <>
+      {/* Turnos como pestañas */}
+      <div className="flex gap-1 mb-4 flex-wrap">
+        {turnos.map(t => (
+          <button
+            key={t.id}
+            onClick={() => { setSelectedTurno(t.id); setAddingTo(null); }}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              selectedTurno === t.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Alta de grupo (en el turno seleccionado) */}
       <form onSubmit={e => { e.preventDefault(); addGroup.mutate(); }} className="flex items-end gap-2 mb-5">
         <div className="flex-1">
           <label className="text-[11px] font-medium text-muted-foreground block mb-1">Nombre del grupo</label>
@@ -687,7 +737,7 @@ function SharingGroupsManager() {
         </div>
         <button
           type="submit"
-          disabled={!name.trim() || addGroup.isPending}
+          disabled={!name.trim() || !selectedTurno || addGroup.isPending}
           className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
         >
           <Plus className="h-4 w-4" /> Crear
@@ -696,14 +746,14 @@ function SharingGroupsManager() {
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
-      ) : !groups?.length ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">Todavía no creaste grupos. Creá el primero arriba.</p>
+      ) : !turnoGroups.length ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Este turno no tiene grupos todavía. Creá el primero arriba.</p>
       ) : (
         <div className="space-y-3">
-          {groups.map(g => {
+          {turnoGroups.map(g => {
             const gm = (members ?? []).filter(m => m.sharing_group_id === g.id);
             const memberIds = new Set(gm.map(m => m.client_id));
-            const available = (clients ?? []).filter(c => !memberIds.has(c.id));
+            const available = (turnoClients ?? []).filter(c => !memberIds.has(c.id));
             return (
               <div key={g.id} className="bg-card border border-border rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -777,6 +827,8 @@ function SharingGroupsManager() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );
