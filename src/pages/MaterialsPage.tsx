@@ -18,7 +18,7 @@ type OccItem = { block: number; name: string; count: number; categoryId: string 
 type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number };
 
 export default function MaterialsPage() {
-  const [mainView, setMainView] = useState<"ocupacion" | "inventario">("ocupacion");
+  const [mainView, setMainView] = useState<"ocupacion" | "inventario" | "grupos">("ocupacion");
   const [occView, setOccView] = useState<"ejercicio" | "material">("ejercicio"); // sub-vista de Ocupación
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
@@ -129,10 +129,14 @@ export default function MaterialsPage() {
       const exerciseIds = [...new Set(rows.map(r => r.exerciseId).filter(Boolean) as string[])];
       let matItems: MatItem[] = [];
       if (exerciseIds.length) {
-        const [{ data: exMats }, { data: mats }] = await Promise.all([
+        const [{ data: exMats }, { data: mats }, { data: shareMembers }] = await Promise.all([
           (supabase as any).from("exercise_materials").select("exercise_id, material_id, quantity").in("exercise_id", exerciseIds),
           (supabase as any).from("materials").select("id, name, quantity"),
+          (supabase as any).from("sharing_group_members").select("sharing_group_id, client_id"),
         ]);
+        // Alumno → grupo que comparte estación (los del mismo grupo cuentan como uno)
+        const clientGroup = new Map<string, string>();
+        for (const sm of (shareMembers ?? []) as any[]) clientGroup.set(sm.client_id, sm.sharing_group_id);
         const matById = new Map<string, { name: string; stock: number }>(
           (mats ?? []).map((m: any) => [m.id, { name: m.name, stock: m.quantity ?? 0 }])
         );
@@ -159,7 +163,15 @@ export default function MaterialsPage() {
         matItems = [...perStudent.entries()].map(([key, sm]) => {
           const [blockStr, materialId] = key.split("__");
           const info = matById.get(materialId);
-          const demand = [...sm.values()].reduce((a, b) => a + b, 0);
+          // Colapsar alumnos del mismo grupo compartido: cada grupo aporta una sola vez
+          // (las unidades que ocupa = el máximo entre sus integrantes presentes).
+          const contributions = new Map<string, number>();
+          for (const [clientId, units] of sm) {
+            const gid = clientGroup.get(clientId);
+            const ckey = gid ? `g:${gid}` : `c:${clientId}`;
+            contributions.set(ckey, Math.max(contributions.get(ckey) ?? 0, units));
+          }
+          const demand = [...contributions.values()].reduce((a, b) => a + b, 0);
           return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0 };
         }).sort((a, b) => (b.demand - b.stock) - (a.demand - a.stock) || b.demand - a.demand || a.block - b.block);
       }
@@ -229,10 +241,20 @@ export default function MaterialsPage() {
         >
           <Package className="h-4 w-4" /> Inventario
         </button>
+        <button
+          onClick={() => setMainView("grupos")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            mainView === "grupos" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="h-4 w-4" /> Grupos
+        </button>
       </div>
 
       {mainView === "inventario" ? (
         <InventoryManager />
+      ) : mainView === "grupos" ? (
+        <SharingGroupsManager />
       ) : (
       <>
       <p className="text-muted-foreground mb-4 text-sm">
@@ -563,6 +585,177 @@ function InventoryManager() {
               )}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Grupos que comparten estación (Fase 2) ─────────────────────────────────
+// Alumnos que comparten un material a la vez por decisión del coach. En la vista
+// "Por material", los del mismo grupo cuentan como uno.
+type ShareGroup = { id: string; name: string };
+type ShareMember = { id: string; sharing_group_id: string; client_id: string };
+
+function SharingGroupsManager() {
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const [name, setName] = useState("");
+  const [addingTo, setAddingTo] = useState<string | null>(null); // grupo al que se está agregando
+
+  const { data: groups, isLoading } = useQuery({
+    queryKey: ["sharing-groups"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("sharing_groups").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as ShareGroup[];
+    },
+  });
+  const { data: members } = useQuery({
+    queryKey: ["sharing-group-members"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("sharing_group_members").select("id, sharing_group_id, client_id");
+      if (error) throw error;
+      return (data ?? []) as ShareMember[];
+    },
+  });
+  const { data: clients } = useQuery({
+    queryKey: ["clients-min"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clients").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+
+  const clientName = (id: string) => clients?.find(c => c.id === id)?.name ?? "—";
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["sharing-groups"] });
+    queryClient.invalidateQueries({ queryKey: ["sharing-group-members"] });
+    queryClient.invalidateQueries({ queryKey: ["materials-overview"] }); // recalcular demanda
+  };
+
+  const addGroup = useMutation({
+    mutationFn: async () => {
+      const n = name.trim();
+      if (!n) throw new Error("empty");
+      const { error } = await (supabase as any).from("sharing_groups").insert({ name: n });
+      if (error) throw error;
+    },
+    onSuccess: () => { setName(""); invalidate(); toast.success("Grupo creado"); },
+    onError: (e: any) => { if (e?.message !== "empty") toast.error("No se pudo crear el grupo"); },
+  });
+  const deleteGroup = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("sharing_groups").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Grupo eliminado"); },
+    onError: () => toast.error("No se pudo eliminar"),
+  });
+  const addMember = useMutation({
+    mutationFn: async ({ groupId, clientId }: { groupId: string; clientId: string }) => {
+      const { error } = await (supabase as any).from("sharing_group_members").insert({ sharing_group_id: groupId, client_id: clientId });
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); },
+    onError: () => toast.error("No se pudo agregar al alumno"),
+  });
+  const removeMember = useMutation({
+    mutationFn: async (memberId: string) => {
+      const { error } = await (supabase as any).from("sharing_group_members").delete().eq("id", memberId);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); },
+    onError: () => toast.error("No se pudo quitar al alumno"),
+  });
+
+  return (
+    <div className="max-w-xl">
+      <p className="text-muted-foreground mb-4 text-sm">
+        Grupos de alumnos que comparten una estación a propósito. En la vista <span className="font-medium">Por material</span> los
+        integrantes de un mismo grupo cuentan como uno, así no se marca como faltante algo que decidiste vos.
+      </p>
+
+      {/* Alta de grupo */}
+      <form onSubmit={e => { e.preventDefault(); addGroup.mutate(); }} className="flex items-end gap-2 mb-5">
+        <div className="flex-1">
+          <label className="text-[11px] font-medium text-muted-foreground block mb-1">Nombre del grupo</label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Comparten banco, Pareja press" className="h-9" />
+        </div>
+        <button
+          type="submit"
+          disabled={!name.trim() || addGroup.isPending}
+          className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" /> Crear
+        </button>
+      </form>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
+      ) : !groups?.length ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Todavía no creaste grupos. Creá el primero arriba.</p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(g => {
+            const gm = (members ?? []).filter(m => m.sharing_group_id === g.id);
+            const memberIds = new Set(gm.map(m => m.client_id));
+            const available = (clients ?? []).filter(c => !memberIds.has(c.id));
+            return (
+              <div key={g.id} className="bg-card border border-border rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-foreground">{g.name} <span className="text-xs font-normal text-muted-foreground">({gm.length})</span></span>
+                  <button
+                    onClick={async () => {
+                      if (await confirm({ title: `¿Eliminar el grupo "${g.name}"?`, description: "Los alumnos no se borran, solo se deshace el grupo." })) {
+                        deleteGroup.mutate(g.id);
+                      }
+                    }}
+                    title="Eliminar grupo"
+                    className="p-1 rounded-md hover:bg-secondary text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {gm.length === 0 && <span className="text-xs text-muted-foreground">Sin alumnos todavía.</span>}
+                  {gm.map(m => (
+                    <span key={m.id} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground">
+                      {clientName(m.client_id)}
+                      <button onClick={() => removeMember.mutate(m.id)} title="Quitar" className="text-muted-foreground hover:text-destructive">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                {addingTo === g.id ? (
+                  <select
+                    autoFocus
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                    defaultValue=""
+                    onChange={e => {
+                      if (e.target.value) addMember.mutate({ groupId: g.id, clientId: e.target.value });
+                      setAddingTo(null);
+                    }}
+                    onBlur={() => setAddingTo(null)}
+                  >
+                    <option value="">Elegí un alumno…</option>
+                    {available.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                ) : (
+                  <button
+                    onClick={() => setAddingTo(g.id)}
+                    disabled={!available.length}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:text-muted-foreground disabled:cursor-default"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> {available.length ? "Agregar alumno" : "Todos los alumnos ya están"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
