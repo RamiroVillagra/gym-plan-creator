@@ -15,7 +15,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 
 type OccItem = { block: number; name: string; count: number; categoryId: string | null };
 // Demanda de un material en un bloque del turno vs. stock disponible (Fase 2 · Paso 4)
-type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number };
+type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number; students: number };
 
 export default function MaterialsPage() {
   const [mainView, setMainView] = useState<"ocupacion" | "inventario" | "grupos">("ocupacion");
@@ -172,7 +172,7 @@ export default function MaterialsPage() {
             contributions.set(ckey, Math.max(contributions.get(ckey) ?? 0, units));
           }
           const demand = [...contributions.values()].reduce((a, b) => a + b, 0);
-          return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0 };
+          return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0, students: sm.size };
         }).sort((a, b) => (b.demand - b.stock) - (a.demand - a.stock) || b.demand - a.demand || a.block - b.block);
       }
 
@@ -362,11 +362,18 @@ export default function MaterialsPage() {
                 <div className="bg-card border border-border rounded-xl divide-y divide-border/60 overflow-hidden">
                   {matItems.map((m, i) => {
                     const short = m.demand > m.stock;
+                    const shared = Math.max(0, m.students - m.demand); // alumnos ahorrados por grupos compartidos
                     return (
                       <div key={i} className="flex items-center gap-3 px-3 py-2.5">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-sm font-medium text-foreground truncate">{m.name}</span>
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {m.name}
+                              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                                {m.students} alumno{m.students !== 1 ? "s" : ""}
+                                {shared > 0 && <span className="text-primary"> · {shared} comparten</span>}
+                              </span>
+                            </span>
                             <span className={`text-sm font-bold shrink-0 ${short ? "text-destructive" : "text-muted-foreground"}`}>
                               {m.demand}<span className="text-[10px] font-normal text-muted-foreground">/{m.stock}</span>
                               {short && <span className="ml-1 text-[10px] font-bold text-destructive">faltan {m.demand - m.stock}</span>}
