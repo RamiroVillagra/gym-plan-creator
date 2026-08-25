@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Search, Pencil, Tag, X, ChevronDown, ChevronRight, AlertTriangle, Play } from "lucide-react";
+import { Plus, Trash2, Search, Pencil, Tag, X, ChevronDown, ChevronRight, AlertTriangle, Play, Check, Package } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
@@ -29,6 +29,10 @@ export default function ExercisesPage() {
   const [editVideoUrl, setEditVideoUrl] = useState("");
 
   const [watchingUrl, setWatchingUrl] = useState<string | null>(null);
+
+  // Materiales que usa el ejercicio (mapa material_id -> cantidad). Fase 2 · Paso 2.
+  const [newMats, setNewMats] = useState<Record<string, number>>({});
+  const [editMats, setEditMats] = useState<Record<string, number>>({});
 
   // Category management
   const [catOpen, setCatOpen] = useState(false);
@@ -61,6 +65,28 @@ export default function ExercisesPage() {
       return data;
     },
   });
+
+  // Inventario de materiales (para el selector). Comparte cache con Materiales → Inventario.
+  const { data: materials } = useQuery({
+    queryKey: ["materials"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("materials").select("id, name, quantity").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string; quantity: number }[];
+    },
+  });
+
+  // Sincroniza el mapeo ejercicio→materiales: borra los previos y reinserta los elegidos.
+  const syncExerciseMaterials = async (exerciseId: string, mats: Record<string, number>) => {
+    await (supabase as any).from("exercise_materials").delete().eq("exercise_id", exerciseId);
+    const rows = Object.entries(mats)
+      .filter(([, q]) => q > 0)
+      .map(([material_id, quantity]) => ({ exercise_id: exerciseId, material_id, quantity }));
+    if (rows.length) {
+      const { error } = await (supabase as any).from("exercise_materials").insert(rows);
+      if (error) throw error;
+    }
+  };
 
   // Category mutations
   const addCategory = useMutation({
@@ -103,19 +129,20 @@ export default function ExercisesPage() {
   // Exercise mutations
   const addExercise = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("exercises").insert({
+      const { data, error } = await supabase.from("exercises").insert({
         name,
         category_id: categoryId || null,
         muscle_group: categoryId ? categories?.find(c => c.id === categoryId)?.name ?? null : null,
         description: description || null,
         video_url: videoUrl || null,
         type: libType,
-      } as any);
+      } as any).select("id").single();
       if (error) throw error;
+      if (data?.id) await syncExerciseMaterials(data.id, newMats);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
-      setName(""); setCategoryId(""); setDescription(""); setVideoUrl("");
+      setName(""); setCategoryId(""); setDescription(""); setVideoUrl(""); setNewMats({});
       setOpen(false);
       toast.success("Ejercicio agregado");
     },
@@ -132,9 +159,11 @@ export default function ExercisesPage() {
         video_url: editVideoUrl || null,
       } as any).eq("id", editId);
       if (error) throw error;
+      await syncExerciseMaterials(editId, editMats);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["exercises"] });
+      queryClient.invalidateQueries({ queryKey: ["exercise-materials"] });
       setEditOpen(false);
       toast.success("Ejercicio actualizado");
     },
@@ -277,13 +306,21 @@ export default function ExercisesPage() {
         </div>
       </div>
       <div className="flex gap-1">
-        <Button variant="ghost" size="icon" onClick={() => {
+        <Button variant="ghost" size="icon" onClick={async () => {
           setEditId(ex.id);
           setEditName(ex.name);
           setEditCategoryId((ex as any).category_id ?? "");
           setEditDescription(ex.description ?? "");
           setEditVideoUrl((ex as any).video_url ?? "");
+          setEditMats({}); // se rellena abajo con lo que ya tenga mapeado
           setEditOpen(true);
+          const { data } = await (supabase as any)
+            .from("exercise_materials")
+            .select("material_id, quantity")
+            .eq("exercise_id", ex.id);
+          const map: Record<string, number> = {};
+          (data ?? []).forEach((r: any) => { map[r.material_id] = r.quantity; });
+          setEditMats(map);
         }}>
           <Pencil className="h-4 w-4 text-muted-foreground" />
         </Button>
@@ -341,6 +378,7 @@ export default function ExercisesPage() {
                 </select>
                 <Input placeholder="Descripción (opcional)" value={description} onChange={e => setDescription(e.target.value)} />
                 <Input placeholder="Link de YouTube (opcional)" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} type="url" />
+                <MaterialsField materials={materials} value={newMats} onChange={setNewMats} />
                 <Button className="w-full" onClick={() => addExercise.mutate()} disabled={!name.trim()}>Guardar</Button>
               </div>
             </DialogContent>
@@ -401,6 +439,7 @@ export default function ExercisesPage() {
             </select>
             <Input placeholder="Descripción" value={editDescription} onChange={e => setEditDescription(e.target.value)} />
             <Input placeholder="Link de YouTube (opcional)" value={editVideoUrl} onChange={e => setEditVideoUrl(e.target.value)} type="url" />
+            <MaterialsField materials={materials} value={editMats} onChange={setEditMats} />
             <Button className="w-full" onClick={() => updateExercise.mutate()} disabled={!editName.trim()}>Guardar</Button>
           </div>
         </DialogContent>
@@ -570,6 +609,77 @@ export default function ExercisesPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── Selector de materiales para un ejercicio (Fase 2 · Paso 2) ──────────────
+// `value` es un mapa material_id -> cantidad. Tildar un material lo agrega con
+// cantidad 1; la cantidad es editable (ej. barra ×1, discos ×4).
+function MaterialsField({
+  materials,
+  value,
+  onChange,
+}: {
+  materials?: { id: string; name: string; quantity: number }[];
+  value: Record<string, number>;
+  onChange: (v: Record<string, number>) => void;
+}) {
+  if (!materials?.length) {
+    return (
+      <div className="text-xs text-muted-foreground bg-secondary/40 rounded-lg px-3 py-2">
+        No hay materiales cargados. Cargalos en <span className="font-medium">Materiales → Inventario</span> y después asignalos acá.
+      </div>
+    );
+  }
+  const toggle = (id: string) => {
+    const next = { ...value };
+    if (id in next) delete next[id];
+    else next[id] = 1;
+    onChange(next);
+  };
+  const setQty = (id: string, q: number) => onChange({ ...value, [id]: Math.max(1, q || 1) });
+  const selectedCount = Object.keys(value).length;
+
+  return (
+    <div>
+      <label className="text-sm font-medium text-foreground flex items-center gap-1.5 mb-1">
+        <Package className="h-4 w-4 text-muted-foreground" />
+        Materiales que usa {selectedCount > 0 && <span className="text-xs font-normal text-muted-foreground">({selectedCount})</span>}
+      </label>
+      <div className="border border-border rounded-lg divide-y divide-border/60 max-h-48 overflow-auto">
+        {materials.map(m => {
+          const on = m.id in value;
+          return (
+            <div key={m.id} className="flex items-center gap-2 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => toggle(m.id)}
+                className={`h-5 w-5 shrink-0 rounded border flex items-center justify-center transition-colors ${
+                  on ? "bg-primary border-primary text-primary-foreground" : "border-input hover:border-primary"
+                }`}
+              >
+                {on && <Check className="h-3.5 w-3.5" />}
+              </button>
+              <button type="button" onClick={() => toggle(m.id)} className="flex-1 text-left text-sm text-foreground truncate">
+                {m.name} <span className="text-[10px] text-muted-foreground">({m.quantity} u.)</span>
+              </button>
+              {on && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[10px] text-muted-foreground">usa</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={value[m.id]}
+                    onChange={e => setQty(m.id, parseInt(e.target.value))}
+                    className="h-7 w-14 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
