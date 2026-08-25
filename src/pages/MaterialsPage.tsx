@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, Plus, Pencil, Trash2, Check, X, Search } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -602,6 +602,7 @@ function SharingGroupsManager() {
   const confirm = useConfirm();
   const [name, setName] = useState("");
   const [addingTo, setAddingTo] = useState<string | null>(null); // grupo al que se está agregando
+  const [memberSearch, setMemberSearch] = useState(""); // búsqueda de alumno a agregar
 
   const { data: groups, isLoading } = useQuery({
     queryKey: ["sharing-groups"],
@@ -731,22 +732,41 @@ function SharingGroupsManager() {
                   ))}
                 </div>
                 {addingTo === g.id ? (
-                  <select
-                    autoFocus
-                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                    defaultValue=""
-                    onChange={e => {
-                      if (e.target.value) addMember.mutate({ groupId: g.id, clientId: e.target.value });
-                      setAddingTo(null);
-                    }}
-                    onBlur={() => setAddingTo(null)}
-                  >
-                    <option value="">Elegí un alumno…</option>
-                    {available.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="flex items-center px-3 py-2 border-b border-border">
+                      <Search className="h-3.5 w-3.5 text-muted-foreground mr-2 shrink-0" />
+                      <input
+                        autoFocus
+                        className="h-7 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                        placeholder="Buscar alumno..."
+                        value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                      />
+                      <button onClick={() => { setAddingTo(null); setMemberSearch(""); }} title="Cerrar" className="text-muted-foreground hover:text-foreground ml-1">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto">
+                      {(() => {
+                        const results = available.filter(c => c.name.toLowerCase().includes(memberSearch.toLowerCase()));
+                        if (!results.length) {
+                          return <p className="text-xs text-muted-foreground px-3 py-2 text-center">Sin resultados</p>;
+                        }
+                        return results.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => { addMember.mutate({ groupId: g.id, clientId: c.id }); setMemberSearch(""); }}
+                            className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-secondary transition-colors"
+                          >
+                            {c.name}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  </div>
                 ) : (
                   <button
-                    onClick={() => setAddingTo(g.id)}
+                    onClick={() => { setAddingTo(g.id); setMemberSearch(""); }}
                     disabled={!available.length}
                     className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors disabled:text-muted-foreground disabled:cursor-default"
                   >
