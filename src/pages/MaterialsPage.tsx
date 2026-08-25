@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 // ─── Fase 1: Ocupación de materiales por turno ──────────────────────────────
 // Lee los turnos del Modo Sala y, para un día, muestra los ejercicios de cada
@@ -14,6 +16,7 @@ import { es } from "date-fns/locale";
 type OccItem = { block: number; name: string; count: number; categoryId: string | null };
 
 export default function MaterialsPage() {
+  const [mainView, setMainView] = useState<"ocupacion" | "inventario">("ocupacion");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
@@ -140,21 +143,48 @@ export default function MaterialsPage() {
           <Boxes className="h-7 w-7 text-primary" />
           <h1 className="text-3xl font-heading font-bold">Materiales</h1>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <select
-            value={filterCategory}
-            onChange={e => setFilterCategory(e.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-          >
-            <option value="">Todas las categorías</option>
-            {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 h-9" />
+        {mainView === "ocupacion" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={filterCategory}
+              onChange={e => setFilterCategory(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              <option value="">Todas las categorías</option>
+              {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <div className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-muted-foreground" />
+              <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 h-9" />
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* Toggle de vista: Ocupación (Fase 1) / Inventario (Fase 2) */}
+      <div className="flex gap-1 mb-4 bg-secondary/60 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setMainView("ocupacion")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            mainView === "ocupacion" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="h-4 w-4" /> Ocupación
+        </button>
+        <button
+          onClick={() => setMainView("inventario")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            mainView === "inventario" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Package className="h-4 w-4" /> Inventario
+        </button>
+      </div>
+
+      {mainView === "inventario" ? (
+        <InventoryManager />
+      ) : (
+      <>
       <p className="text-muted-foreground mb-4 text-sm">
         Qué ejercicios se van a usar más en cada turno ese día — para evitar que se junten en el mismo material.
       </p>
@@ -266,13 +296,151 @@ export default function MaterialsPage() {
           )}
         </>
       )}
+      </>
+      )}
+    </div>
+  );
+}
 
-      {/* ── Fase 2 (staging, oculto) ─────────────────────────────────────────
-          El esquema para materiales ya existe (tablas `materials` y
-          `exercise_materials`). En la Fase 2, este mismo agregado se hará por
-          MATERIAL (no por ejercicio) y se comparará la demanda contra el stock
-          (`materials.quantity`) para marcar "alcanza / no alcanza".
-          Placeholder intencional — no renderiza nada todavía. */}
+// ─── Fase 2 · Paso 1: ABM del inventario de materiales ──────────────────────
+// CRUD sobre la tabla `materials` (nombre + stock del gym + nota opcional).
+// Es la base: en pasos siguientes se mapea cada ejercicio a sus materiales
+// (`exercise_materials`) y se cruza la demanda por turno/bloque contra este stock.
+type Material = { id: string; name: string; quantity: number; notes: string | null };
+
+function InventoryManager() {
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const [name, setName] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editQty, setEditQty] = useState("1");
+
+  const { data: materials, isLoading } = useQuery({
+    queryKey: ["materials"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("materials").select("id, name, quantity, notes").order("name");
+      if (error) throw error;
+      return (data ?? []) as Material[];
+    },
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["materials"] });
+
+  const addMaterial = useMutation({
+    mutationFn: async () => {
+      const n = name.trim();
+      if (!n) throw new Error("empty");
+      const q = Math.max(0, parseInt(quantity) || 0);
+      const { error } = await (supabase as any).from("materials").insert({ name: n, quantity: q });
+      if (error) throw error;
+    },
+    onSuccess: () => { setName(""); setQuantity("1"); invalidate(); toast.success("Material agregado"); },
+    onError: (e: any) => { if (e?.message !== "empty") toast.error("No se pudo agregar el material"); },
+  });
+
+  const updateMaterial = useMutation({
+    mutationFn: async () => {
+      const n = editName.trim();
+      if (!editingId || !n) throw new Error("empty");
+      const q = Math.max(0, parseInt(editQty) || 0);
+      const { error } = await (supabase as any).from("materials").update({ name: n, quantity: q }).eq("id", editingId);
+      if (error) throw error;
+    },
+    onSuccess: () => { setEditingId(null); invalidate(); toast.success("Material actualizado"); },
+    onError: (e: any) => { if (e?.message !== "empty") toast.error("No se pudo actualizar"); },
+  });
+
+  const deleteMaterial = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).from("materials").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { invalidate(); toast.success("Material eliminado"); },
+    onError: () => toast.error("No se pudo eliminar"),
+  });
+
+  const startEdit = (m: Material) => { setEditingId(m.id); setEditName(m.name); setEditQty(String(m.quantity)); };
+
+  return (
+    <div className="max-w-xl">
+      <p className="text-muted-foreground mb-4 text-sm">
+        El equipamiento del gimnasio y cuántas unidades hay de cada uno. Es la base para avisar,
+        más adelante, cuándo un turno pide más material del disponible.
+      </p>
+
+      {/* Alta */}
+      <form
+        onSubmit={e => { e.preventDefault(); addMaterial.mutate(); }}
+        className="flex items-end gap-2 mb-5 flex-wrap"
+      >
+        <div className="flex-1 min-w-[10rem]">
+          <label className="text-[11px] font-medium text-muted-foreground block mb-1">Material</label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ej. Barra, Rack, Banco" className="h-9" />
+        </div>
+        <div className="w-20">
+          <label className="text-[11px] font-medium text-muted-foreground block mb-1">Cantidad</label>
+          <Input type="number" min={0} value={quantity} onChange={e => setQuantity(e.target.value)} className="h-9" />
+        </div>
+        <button
+          type="submit"
+          disabled={!name.trim() || addMaterial.isPending}
+          className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+        >
+          <Plus className="h-4 w-4" /> Agregar
+        </button>
+      </form>
+
+      {/* Lista */}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
+      ) : !materials?.length ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          Todavía no cargaste materiales. Agregá el primero arriba.
+        </p>
+      ) : (
+        <div className="bg-card border border-border rounded-xl divide-y divide-border/60 overflow-hidden">
+          {materials.map(m => (
+            <div key={m.id} className="flex items-center gap-3 px-3 py-2.5">
+              {editingId === m.id ? (
+                <>
+                  <Input value={editName} onChange={e => setEditName(e.target.value)} className="h-8 flex-1" autoFocus />
+                  <Input type="number" min={0} value={editQty} onChange={e => setEditQty(e.target.value)} className="h-8 w-20" />
+                  <button onClick={() => updateMaterial.mutate()} disabled={updateMaterial.isPending} title="Guardar" className="p-1.5 rounded-md hover:bg-secondary text-primary transition-colors">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setEditingId(null)} title="Cancelar" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-sm font-medium text-foreground truncate">{m.name}</span>
+                  <span className="text-sm font-bold text-foreground shrink-0">
+                    {m.quantity} <span className="text-[10px] font-normal text-muted-foreground">u.</span>
+                  </span>
+                  <button onClick={() => startEdit(m)} title="Editar" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground transition-colors">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (await confirm({ title: `¿Eliminar "${m.name}"?`, description: "Se quitará del inventario. Esta acción no se puede deshacer." })) {
+                        deleteMaterial.mutate(m.id);
+                      }
+                    }}
+                    title="Eliminar"
+                    className="p-1.5 rounded-md hover:bg-secondary text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
