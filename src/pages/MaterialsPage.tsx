@@ -14,9 +14,12 @@ import { useConfirm } from "@/components/ConfirmDialog";
 // embotellamiento). NO modifica nada del Modo Sala ni del registro.
 
 type OccItem = { block: number; name: string; count: number; categoryId: string | null };
+// Demanda de un material en un bloque del turno vs. stock disponible (Fase 2 · Paso 4)
+type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number };
 
 export default function MaterialsPage() {
   const [mainView, setMainView] = useState<"ocupacion" | "inventario">("ocupacion");
+  const [occView, setOccView] = useState<"ejercicio" | "material">("ejercicio"); // sub-vista de Ocupación
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
@@ -48,7 +51,7 @@ export default function MaterialsPage() {
   const { data: overview, isLoading } = useQuery({
     queryKey: ["materials-overview", selectedTurno, date],
     enabled: !!selectedTurno,
-    queryFn: async (): Promise<{ memberCount: number; memberList: { id: string; name: string }[]; items: OccItem[] }> => {
+    queryFn: async (): Promise<{ memberCount: number; memberList: { id: string; name: string }[]; items: OccItem[]; matItems: MatItem[] }> => {
       // 1. Alumnos del turno
       const { data: members } = await (supabase as any)
         .from("kiosk_group_members")
@@ -59,7 +62,7 @@ export default function MaterialsPage() {
         .filter((m: any) => m.id)
         .sort((a: any, b: any) => a.name.localeCompare(b.name));
       const clientIds: string[] = memberList.map(m => m.id);
-      if (!clientIds.length) return { memberCount: 0, memberList: [], items: [] };
+      if (!clientIds.length) return { memberCount: 0, memberList: [], items: [], matItems: [] };
 
       // 2. Entrenamientos del día para esos alumnos
       const { data: workouts } = await supabase
@@ -67,7 +70,7 @@ export default function MaterialsPage() {
         .select("id, client_id, routine_id, day_number")
         .eq("workout_date", date)
         .in("client_id", clientIds);
-      if (!workouts?.length) return { memberCount: clientIds.length, memberList, items: [] };
+      if (!workouts?.length) return { memberCount: clientIds.length, memberList, items: [], matItems: [] };
 
       const workoutIds = workouts.map((w: any) => w.id);
       const workoutClient = new Map<string, string>(workouts.map((w: any) => [w.id, w.client_id]));
@@ -75,7 +78,7 @@ export default function MaterialsPage() {
       // 3. Ejercicios modificados (overrides) de esos entrenamientos
       const { data: overrides } = await supabase
         .from("assigned_workout_exercises")
-        .select("assigned_workout_id, block_number, exercises(name, category_id)")
+        .select("assigned_workout_id, block_number, exercise_id, exercises(name, category_id)")
         .in("assigned_workout_id", workoutIds);
 
       // 4. Entrenamientos sin overrides → ejercicios de la rutina base
@@ -86,16 +89,17 @@ export default function MaterialsPage() {
       if (routineIds.length) {
         const { data: base } = await supabase
           .from("routine_exercises")
-          .select("routine_id, day_number, block_number, exercises(name, category_id)")
+          .select("routine_id, day_number, block_number, exercise_id, exercises(name, category_id)")
           .in("routine_id", routineIds as string[]);
         baseEx = base ?? [];
       }
 
-      // 5. Lista unificada {block, exerciseName, clientId, categoryId}
-      const rows: { block: number; name: string; clientId: string; categoryId: string | null }[] = [];
+      // 5. Lista unificada {block, exerciseId, exerciseName, clientId, categoryId}
+      const rows: { block: number; exerciseId: string | null; name: string; clientId: string; categoryId: string | null }[] = [];
       for (const o of (overrides ?? []) as any[]) {
         rows.push({
           block: o.block_number ?? 1,
+          exerciseId: o.exercise_id ?? null,
           name: o.exercises?.name ?? "—",
           clientId: workoutClient.get(o.assigned_workout_id) ?? "",
           categoryId: o.exercises?.category_id ?? null,
@@ -106,7 +110,7 @@ export default function MaterialsPage() {
           (b) => b.routine_id === w.routine_id && (b.day_number ?? 1) === (w.day_number ?? 1)
         );
         for (const b of base) {
-          rows.push({ block: b.block_number ?? 1, name: b.exercises?.name ?? "—", clientId: w.client_id, categoryId: b.exercises?.category_id ?? null });
+          rows.push({ block: b.block_number ?? 1, exerciseId: b.exercise_id ?? null, name: b.exercises?.name ?? "—", clientId: w.client_id, categoryId: b.exercises?.category_id ?? null });
         }
       }
 
@@ -121,7 +125,46 @@ export default function MaterialsPage() {
         .map(v => ({ block: v.block, name: v.name, count: v.set.size, categoryId: v.categoryId }))
         .sort((a, b) => b.count - a.count || a.block - b.block || a.name.localeCompare(b.name));
 
-      return { memberCount: clientIds.length, memberList, items };
+      // 7. Demanda por material (Fase 2 · Paso 4): mapeo ejercicio→materiales y stock.
+      const exerciseIds = [...new Set(rows.map(r => r.exerciseId).filter(Boolean) as string[])];
+      let matItems: MatItem[] = [];
+      if (exerciseIds.length) {
+        const [{ data: exMats }, { data: mats }] = await Promise.all([
+          (supabase as any).from("exercise_materials").select("exercise_id, material_id, quantity").in("exercise_id", exerciseIds),
+          (supabase as any).from("materials").select("id, name, quantity"),
+        ]);
+        const matById = new Map<string, { name: string; stock: number }>(
+          (mats ?? []).map((m: any) => [m.id, { name: m.name, stock: m.quantity ?? 0 }])
+        );
+        // exerciseId -> [{materialId, units}]
+        const exToMats = new Map<string, { materialId: string; units: number }[]>();
+        for (const em of (exMats ?? []) as any[]) {
+          if (!exToMats.has(em.exercise_id)) exToMats.set(em.exercise_id, []);
+          exToMats.get(em.exercise_id)!.push({ materialId: em.material_id, units: em.quantity ?? 1 });
+        }
+        // Por (bloque, material): unidades que ocupa cada alumno = máx entre sus ejercicios del bloque.
+        // Demanda del bloque = suma de las unidades por alumno (evita contar dos veces al mismo alumno).
+        const perStudent = new Map<string, Map<string, number>>(); // key block__material -> (clientId -> units)
+        for (const r of rows) {
+          if (!r.exerciseId) continue;
+          const usage = exToMats.get(r.exerciseId);
+          if (!usage) continue;
+          for (const u of usage) {
+            const key = `${r.block}__${u.materialId}`;
+            if (!perStudent.has(key)) perStudent.set(key, new Map());
+            const sm = perStudent.get(key)!;
+            sm.set(r.clientId, Math.max(sm.get(r.clientId) ?? 0, u.units));
+          }
+        }
+        matItems = [...perStudent.entries()].map(([key, sm]) => {
+          const [blockStr, materialId] = key.split("__");
+          const info = matById.get(materialId);
+          const demand = [...sm.values()].reduce((a, b) => a + b, 0);
+          return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0 };
+        }).sort((a, b) => (b.demand - b.stock) - (a.demand - a.stock) || b.demand - a.demand || a.block - b.block);
+      }
+
+      return { memberCount: clientIds.length, memberList, items, matItems };
     },
   });
 
@@ -136,6 +179,11 @@ export default function MaterialsPage() {
   const hotspots = items.filter(i => i.count >= 3);
   const watch = items.filter(i => i.count === 2);
 
+  // Vista por material (Paso 4): demanda vs stock
+  const matItems = overview?.matItems ?? [];
+  const matShortages = matItems.filter(m => m.demand > m.stock);
+  const maxMatDemand = Math.max(1, ...matItems.map(m => Math.max(m.demand, m.stock)));
+
   return (
     <div className="animate-fade-in max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -145,14 +193,16 @@ export default function MaterialsPage() {
         </div>
         {mainView === "ocupacion" && (
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={filterCategory}
-              onChange={e => setFilterCategory(e.target.value)}
-              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-            >
-              <option value="">Todas las categorías</option>
-              {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            {occView === "ejercicio" && (
+              <select
+                value={filterCategory}
+                onChange={e => setFilterCategory(e.target.value)}
+                className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+              >
+                <option value="">Todas las categorías</option>
+                {categories?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
             <div className="flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-40 h-9" />
@@ -240,8 +290,82 @@ export default function MaterialsPage() {
             </div>
           )}
 
+          {/* Sub-toggle: por ejercicio / por material */}
+          <div className="flex gap-1 mb-4 bg-secondary/60 p-1 rounded-lg w-fit">
+            <button
+              onClick={() => setOccView("ejercicio")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                occView === "ejercicio" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Por ejercicio
+            </button>
+            <button
+              onClick={() => setOccView("material")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                occView === "material" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Por material
+            </button>
+          </div>
+
           {isLoading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
+          ) : occView === "material" ? (
+            !matItems.length ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Sin datos de materiales. Asigná materiales a los ejercicios (en Ejercicios) y cargá stock en Inventario.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {/* Alerta de faltantes de material */}
+                {matShortages.length > 0 ? (
+                  <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3">
+                    <p className="text-sm font-bold text-destructive flex items-center gap-1.5">
+                      <AlertTriangle className="h-4 w-4" />
+                      {matShortages.length} {matShortages.length === 1 ? "material no alcanza" : "materiales no alcanzan"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {matShortages.map(m => `${m.name} (faltan ${m.demand - m.stock})`).join(" · ")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                    <p className="text-sm font-semibold text-primary flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" />El material alcanza para todos los bloques</p>
+                  </div>
+                )}
+
+                {/* Ranking de materiales: demanda vs stock */}
+                <div className="bg-card border border-border rounded-xl divide-y divide-border/60 overflow-hidden">
+                  {matItems.map((m, i) => {
+                    const short = m.demand > m.stock;
+                    return (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-sm font-medium text-foreground truncate">{m.name}</span>
+                            <span className={`text-sm font-bold shrink-0 ${short ? "text-destructive" : "text-muted-foreground"}`}>
+                              {m.demand}<span className="text-[10px] font-normal text-muted-foreground">/{m.stock}</span>
+                              {short && <span className="ml-1 text-[10px] font-bold text-destructive">faltan {m.demand - m.stock}</span>}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                              <div className={`h-full rounded-full ${short ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${Math.min(100, (m.demand / maxMatDemand) * 100)}%` }} />
+                            </div>
+                            <span className="text-[9px] text-muted-foreground shrink-0">Bloque {m.block}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Demanda = alumnos que usan el material en ese bloque (× unidades) · el número chico es el stock disponible.
+                </p>
+              </div>
+            )
           ) : !items.length ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               {filterCategory && (overview?.items.length ?? 0) > 0
