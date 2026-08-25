@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -17,6 +17,7 @@ export default function MaterialsPage() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
+  const [showMembers, setShowMembers] = useState(false); // desplegar lista de alumnos del turno
 
   const { data: categories } = useQuery({
     queryKey: ["exercise-categories"],
@@ -44,16 +45,18 @@ export default function MaterialsPage() {
   const { data: overview, isLoading } = useQuery({
     queryKey: ["materials-overview", selectedTurno, date],
     enabled: !!selectedTurno,
-    queryFn: async (): Promise<{ memberCount: number; items: OccItem[] }> => {
+    queryFn: async (): Promise<{ memberCount: number; memberList: { id: string; name: string }[]; items: OccItem[] }> => {
       // 1. Alumnos del turno
       const { data: members } = await (supabase as any)
         .from("kiosk_group_members")
         .select("clients(id, name)")
         .eq("kiosk_group_id", selectedTurno);
-      const clientIds: string[] = (members ?? [])
-        .map((m: any) => m.clients?.id)
-        .filter(Boolean);
-      if (!clientIds.length) return { memberCount: 0, items: [] };
+      const memberList: { id: string; name: string }[] = (members ?? [])
+        .map((m: any) => ({ id: m.clients?.id, name: m.clients?.name ?? "—" }))
+        .filter((m: any) => m.id)
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+      const clientIds: string[] = memberList.map(m => m.id);
+      if (!clientIds.length) return { memberCount: 0, memberList: [], items: [] };
 
       // 2. Entrenamientos del día para esos alumnos
       const { data: workouts } = await supabase
@@ -61,7 +64,7 @@ export default function MaterialsPage() {
         .select("id, client_id, routine_id, day_number")
         .eq("workout_date", date)
         .in("client_id", clientIds);
-      if (!workouts?.length) return { memberCount: clientIds.length, items: [] };
+      if (!workouts?.length) return { memberCount: clientIds.length, memberList, items: [] };
 
       const workoutIds = workouts.map((w: any) => w.id);
       const workoutClient = new Map<string, string>(workouts.map((w: any) => [w.id, w.client_id]));
@@ -115,7 +118,7 @@ export default function MaterialsPage() {
         .map(v => ({ block: v.block, name: v.name, count: v.set.size, categoryId: v.categoryId }))
         .sort((a, b) => b.count - a.count || a.block - b.block || a.name.localeCompare(b.name));
 
-      return { memberCount: clientIds.length, items };
+      return { memberCount: clientIds.length, memberList, items };
     },
   });
 
@@ -178,8 +181,34 @@ export default function MaterialsPage() {
           {/* Encabezado del turno */}
           <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground capitalize">
             <span className="font-medium text-foreground">{format(new Date(date + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })}</span>
-            <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{overview?.memberCount ?? 0} alumnos</span>
+            <button
+              type="button"
+              onClick={() => setShowMembers(v => !v)}
+              disabled={!overview?.memberList?.length}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-secondary transition-colors disabled:hover:bg-transparent disabled:cursor-default normal-case"
+              title="Ver alumnos del turno"
+            >
+              <Users className="h-3.5 w-3.5" />
+              {overview?.memberCount ?? 0} alumnos
+              {!!overview?.memberList?.length && (
+                showMembers ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
           </div>
+
+          {/* Lista de alumnos del turno (desplegable) */}
+          {showMembers && !!overview?.memberList?.length && (
+            <div className="mb-4 bg-card border border-border rounded-xl p-3">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Alumnos del turno</p>
+              <div className="flex flex-wrap gap-1.5">
+                {overview.memberList.map(m => (
+                  <span key={m.id} className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground">
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isLoading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Cargando...</p>
