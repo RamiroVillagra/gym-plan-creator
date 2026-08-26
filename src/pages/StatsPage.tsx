@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, Search, X } from "lucide-react";
+import { TrendingUp, Search, X, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Dot,
@@ -17,6 +17,25 @@ export default function StatsPage() {
   const [selectedExercise, setSelectedExercise] = useState("");
   const [selectedExerciseName, setSelectedExerciseName] = useState("");
   const [exerciseSearch, setExerciseSearch] = useState("");
+
+  // Período y exclusiones
+  const [preset, setPreset] = useState<string>("todo"); // todo | 3m | 6m | 12m | custom
+  const [rangeFrom, setRangeFrom] = useState(""); // yyyy-MM-dd
+  const [rangeTo, setRangeTo] = useState("");
+  const [excludedDates, setExcludedDates] = useState<Set<string>>(new Set()); // sesiones ocultas del gráfico
+
+  const applyPreset = (key: string, months: number | null) => {
+    setPreset(key);
+    setRangeFrom(months == null ? "" : format(subMonths(new Date(), months), "yyyy-MM-dd"));
+    setRangeTo("");
+  };
+  const toggleExcluded = (date: string) => {
+    setExcludedDates(prev => {
+      const next = new Set(prev);
+      next.has(date) ? next.delete(date) : next.add(date);
+      return next;
+    });
+  };
 
   const { data: clients } = useQuery({
     queryKey: ["clients"],
@@ -53,16 +72,23 @@ export default function StatsPage() {
     },
   });
 
-  // Ordenar por fecha y agrupar por sesión
-  const sortedLogs = logs
+  // Ordenar por fecha
+  const allSorted = logs
     ? [...logs].sort((a, b) =>
         a.assigned_workouts.workout_date.localeCompare(b.assigned_workouts.workout_date)
       )
     : [];
 
+  // Filtrar por período (rango de fechas). La tabla muestra estos registros.
+  const inRange = (d: string) => (!rangeFrom || d >= rangeFrom) && (!rangeTo || d <= rangeTo);
+  const sortedLogs = allSorted.filter(l => inRange(l.assigned_workouts.workout_date));
+
+  // Para el gráfico, además, sacar las sesiones excluidas manualmente
+  const visibleLogs = sortedLogs.filter(l => !excludedDates.has(l.assigned_workouts.workout_date));
+
   // Agrupar por fecha para el gráfico (peso máximo por sesión)
   const chartData = Object.values(
-    sortedLogs.reduce((acc: Record<string, any>, log) => {
+    visibleLogs.reduce((acc: Record<string, any>, log) => {
       const date = log.assigned_workouts.workout_date;
       if (!acc[date]) {
         acc[date] = { date, maxWeight: 0, totalSets: 0 };
@@ -154,7 +180,7 @@ export default function StatsPage() {
               {exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase())).map(e => (
                 <button
                   key={e.id}
-                  onClick={() => { setSelectedExercise(e.id); setSelectedExerciseName(e.name); setExerciseSearch(""); }}
+                  onClick={() => { setSelectedExercise(e.id); setSelectedExerciseName(e.name); setExerciseSearch(""); setExcludedDates(new Set()); }}
                   className="w-full text-left px-3 py-2.5 hover:bg-secondary/60 text-sm text-foreground border-b border-border/40 last:border-0 transition-colors"
                 >
                   {e.name}
@@ -177,13 +203,55 @@ export default function StatsPage() {
         </div>
       ) : isLoading ? (
         <div className="text-center py-20 text-muted-foreground">Cargando...</div>
-      ) : sortedLogs.length === 0 ? (
+      ) : allSorted.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
           <p>No hay registros de <span className="text-foreground font-medium">{exerciseName}</span> para <span className="text-foreground font-medium">{clientName}</span>.</p>
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Selector de período */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-xs font-medium text-muted-foreground">Período:</span>
+            <div className="flex gap-1 flex-wrap">
+              {([["todo", "Todo", null], ["3m", "3 meses", 3], ["6m", "6 meses", 6], ["12m", "1 año", 12]] as const).map(([key, label, months]) => (
+                <button
+                  key={key}
+                  onClick={() => applyPreset(key, months)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    preset === key ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>Desde</span>
+              <Input type="date" value={rangeFrom} onChange={e => { setRangeFrom(e.target.value); setPreset("custom"); }} className="h-8 w-36" />
+              <span>Hasta</span>
+              <Input type="date" value={rangeTo} onChange={e => { setRangeTo(e.target.value); setPreset("custom"); }} className="h-8 w-36" />
+            </div>
+          </div>
+
+          {excludedDates.size > 0 && (
+            <div className="flex items-center justify-between bg-secondary/40 rounded-lg px-3 py-2 -mt-4">
+              <span className="text-xs text-muted-foreground">
+                {excludedDates.size} sesión{excludedDates.size !== 1 ? "es" : ""} oculta{excludedDates.size !== 1 ? "s" : ""} del gráfico
+              </span>
+              <button onClick={() => setExcludedDates(new Set())} className="text-xs font-medium text-primary hover:text-primary/80">
+                Mostrar todas
+              </button>
+            </div>
+          )}
+
+          {sortedLogs.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <p>No hay registros en el período elegido. Ampliá el rango o tocá "Todo".</p>
+            </div>
+          ) : (
+          <>
           {/* Gráfico */}
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="font-heading font-semibold text-foreground mb-1">{exerciseName}</h2>
@@ -241,6 +309,7 @@ export default function StatsPage() {
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Serie</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reps</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Peso</th>
+                    <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Gráfico</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -248,8 +317,9 @@ export default function StatsPage() {
                     const date = log.assigned_workouts.workout_date;
                     const prevDate = i > 0 ? sortedLogs[i - 1].assigned_workouts.workout_date : null;
                     const isNewDate = date !== prevDate;
+                    const excluded = excludedDates.has(date);
                     return (
-                      <tr key={i} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
+                      <tr key={i} className={`border-b border-border/50 hover:bg-secondary/20 transition-colors ${excluded ? "opacity-45" : ""}`}>
                         <td className="px-6 py-3 text-foreground">
                           {isNewDate
                             ? format(parseISO(date), "EEEE d MMM yyyy", { locale: es })
@@ -258,8 +328,22 @@ export default function StatsPage() {
                         </td>
                         <td className="px-4 py-3 text-center text-muted-foreground">{log.set_number}</td>
                         <td className="px-4 py-3 text-center text-foreground">{log.reps_done ?? "—"}</td>
-                        <td className="px-4 py-3 text-center font-medium text-primary">
+                        <td className={`px-4 py-3 text-center font-medium text-primary ${excluded ? "line-through" : ""}`}>
                           {log.weight_used != null ? `${log.weight_used} kg` : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {isNewDate && (
+                            <button
+                              onClick={() => toggleExcluded(date)}
+                              title={excluded ? "Mostrar esta sesión en el gráfico" : "Ocultar esta sesión del gráfico"}
+                              className="inline-flex items-center justify-center p-1 rounded-md hover:bg-secondary transition-colors"
+                            >
+                              {excluded
+                                ? <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                : <Eye className="h-4 w-4 text-primary/70" />
+                              }
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -268,6 +352,8 @@ export default function StatsPage() {
               </table>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
