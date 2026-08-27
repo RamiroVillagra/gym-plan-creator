@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmDialog";
+import GymMapEditor from "@/components/GymMapEditor";
 
 // ─── Fase 1: Ocupación de materiales por turno ──────────────────────────────
 // Lee los turnos del Modo Sala y, para un día, muestra los ejercicios de cada
@@ -264,7 +265,7 @@ export default function MaterialsPage() {
       ) : mainView === "grupos" ? (
         <SharingGroupsManager />
       ) : mainView === "plano" ? (
-        <GymMap />
+        <GymMapEditor />
       ) : (
       <>
       <p className="text-muted-foreground mb-4 text-sm">
@@ -851,75 +852,3 @@ function SharingGroupsManager() {
   );
 }
 
-// ─── Plano del gimnasio (croquis para ubicar ejercicios) ────────────────────
-// Primera versión: reproduce el croquis en papel. Zonas como datos para
-// volverlas interactivas después. Números 1 (rojo) y 2 (azul) del croquis.
-const MAP_BLUE = "hsl(var(--primary))";
-const MAP_RED = "hsl(var(--destructive))";
-type MapZone = { id: string; num: 1 | 2; x: number; y: number; w: number; h: number; box?: boolean };
-const mapZones: MapZone[] = [
-  // Franja superior: 1 / [2] / 1 / [2] / 1
-  { id: "a1", num: 1, x: 180, y: 120, w: 110, h: 150 },
-  { id: "a2", num: 2, x: 300, y: 135, w: 80, h: 80, box: true },
-  { id: "a3", num: 1, x: 395, y: 120, w: 105, h: 150 },
-  { id: "a4", num: 2, x: 510, y: 135, w: 80, h: 80, box: true },
-  { id: "a5", num: 1, x: 600, y: 120, w: 140, h: 150 },
-  // Franja inferior: área grande 1 con box 2
-  { id: "b1", num: 1, x: 460, y: 290, w: 280, h: 190 },
-  { id: "b2", num: 2, x: 600, y: 380, w: 80, h: 80, box: true },
-];
-
-function GymMap() {
-  return (
-    <div>
-      <p className="text-muted-foreground mb-4 text-sm">
-        Croquis del gimnasio para ubicar los ejercicios. Es una primera versión — confirmá la forma
-        y las zonas, y después le agregamos la interacción.
-      </p>
-
-      <div className="bg-card border border-border rounded-xl p-4 overflow-x-auto">
-        <svg viewBox="0 0 800 620" className="w-full h-auto" style={{ maxWidth: 800 }}>
-          {/* Límite del terreno (contexto) */}
-          <rect x="30" y="30" width="740" height="540" fill="none" stroke={MAP_BLUE} strokeWidth="2.5" rx="4" opacity="0.5" />
-          {/* Área de entrenamiento */}
-          <rect x="170" y="110" width="580" height="380" fill="none" stroke={MAP_BLUE} strokeWidth="3" />
-          {/* Pared superior con línea punteada */}
-          <line x1="170" y1="110" x2="750" y2="110" stroke={MAP_BLUE} strokeWidth="6" strokeDasharray="2 14" strokeLinecap="round" />
-          {/* Divisor horizontal entre franjas */}
-          <line x1="170" y1="285" x2="750" y2="285" stroke={MAP_RED} strokeWidth="2.5" />
-          {/* Divisores verticales de la franja superior */}
-          <line x1="393" y1="110" x2="393" y2="285" stroke={MAP_RED} strokeWidth="2.5" />
-          <line x1="595" y1="110" x2="595" y2="285" stroke={MAP_RED} strokeWidth="2.5" />
-          {/* Sala izquierda (vacía) */}
-          <rect x="180" y="300" width="170" height="180" fill="none" stroke={MAP_BLUE} strokeWidth="2.5" />
-          {/* Salita con puerta */}
-          <rect x="360" y="360" width="90" height="120" fill="none" stroke={MAP_BLUE} strokeWidth="2.5" />
-          <path d="M 360 388 A 28 28 0 0 1 388 360" fill="none" stroke={MAP_BLUE} strokeWidth="2" />
-          {/* Zonas + boxes */}
-          {mapZones.map(z => (
-            <g key={z.id}>
-              {z.box && <rect x={z.x} y={z.y} width={z.w} height={z.h} fill="none" stroke={MAP_BLUE} strokeWidth="2.5" rx="2" />}
-              <text
-                x={z.x + z.w / 2}
-                y={z.y + z.h / 2}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize="28"
-                fontWeight="700"
-                fill={z.num === 1 ? MAP_RED : MAP_BLUE}
-              >
-                {z.num}
-              </text>
-            </g>
-          ))}
-        </svg>
-      </div>
-
-      <p className="text-xs text-muted-foreground mt-3">
-        ¿Está bien la forma? Decime qué representan los números{" "}
-        <span className="font-bold" style={{ color: "hsl(var(--destructive))" }}>1</span> y{" "}
-        <span className="font-bold text-primary">2</span> y sigo.
-      </p>
-    </div>
-  );
-}
