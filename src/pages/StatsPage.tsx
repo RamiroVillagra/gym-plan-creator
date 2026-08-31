@@ -14,9 +14,10 @@ export default function StatsPage() {
   const [selectedClientName, setSelectedClientName] = useState("");
   const [clientSearch, setClientSearch] = useState("");
 
-  const [selectedExercise, setSelectedExercise] = useState("");
-  const [selectedExerciseName, setSelectedExerciseName] = useState("");
+  // Se pueden combinar varios ejercicios "equivalentes" en un mismo gráfico
+  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]);
   const [exerciseSearch, setExerciseSearch] = useState("");
+  const exerciseIds = selectedExercises.map(e => e.id);
 
   // Período y exclusiones
   const [preset, setPreset] = useState<string>("todo"); // todo | 3m | 6m | 12m | custom
@@ -55,15 +56,15 @@ export default function StatsPage() {
     },
   });
 
-  // Traer todos los workout_logs del cliente+ejercicio con la fecha del workout
+  // Traer los workout_logs del cliente para TODOS los ejercicios seleccionados
   const { data: logs, isLoading } = useQuery({
-    queryKey: ["stats-logs", selectedClient, selectedExercise],
-    enabled: !!selectedClient && !!selectedExercise,
+    queryKey: ["stats-logs", selectedClient, [...exerciseIds].sort().join(",")],
+    enabled: !!selectedClient && exerciseIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workout_logs")
-        .select("set_number, reps_done, weight_used, completed, assigned_workouts!inner(workout_date, client_id)")
-        .eq("exercise_id", selectedExercise)
+        .select("set_number, reps_done, weight_used, completed, exercise_id, exercises(name), assigned_workouts!inner(workout_date, client_id)")
+        .in("exercise_id", exerciseIds)
         .eq("assigned_workouts.client_id", selectedClient)
         .eq("completed", true)
         .order("set_number");
@@ -102,7 +103,19 @@ export default function StatsPage() {
   ).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
   const clientName = selectedClientName;
-  const exerciseName = selectedExerciseName;
+  const exerciseName = selectedExercises.map(e => e.name).join(" + ");
+  const hasExercises = selectedExercises.length > 0;
+  const isCombined = selectedExercises.length > 1;
+
+  const addExercise = (e: { id: string; name: string }) => {
+    setSelectedExercises(prev => prev.some(x => x.id === e.id) ? prev : [...prev, e]);
+    setExerciseSearch("");
+    setExcludedDates(new Set());
+  };
+  const removeExercise = (id: string) => {
+    setSelectedExercises(prev => prev.filter(e => e.id !== id));
+    setExcludedDates(new Set());
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -120,7 +133,7 @@ export default function StatsPage() {
           {selectedClient ? (
             <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
               <span className="text-sm font-medium text-primary">{selectedClientName}</span>
-              <button onClick={() => { setSelectedClient(""); setSelectedClientName(""); setClientSearch(""); setSelectedExercise(""); setSelectedExerciseName(""); setExerciseSearch(""); }}>
+              <button onClick={() => { setSelectedClient(""); setSelectedClientName(""); setClientSearch(""); setSelectedExercises([]); setExerciseSearch(""); }}>
                 <X className="h-4 w-4 text-primary/60 hover:text-primary" />
               </button>
             </div>
@@ -153,53 +166,62 @@ export default function StatsPage() {
           )}
         </div>
 
-        {/* Buscador ejercicio */}
+        {/* Buscador ejercicio (múltiple: combina ejercicios equivalentes) */}
         <div>
-          <label className="text-sm text-muted-foreground block mb-2">Ejercicio</label>
-          {selectedExercise ? (
-            <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
-              <span className="text-sm font-medium text-primary">{selectedExerciseName}</span>
-              <button onClick={() => { setSelectedExercise(""); setSelectedExerciseName(""); setExerciseSearch(""); }}>
-                <X className="h-4 w-4 text-primary/60 hover:text-primary" />
-              </button>
-            </div>
-          ) : (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder={selectedClient ? "Escribí el ejercicio..." : "Primero elegí un cliente"}
-                className="pl-10"
-                value={exerciseSearch}
-                onChange={e => setExerciseSearch(e.target.value)}
-                disabled={!selectedClient}
-              />
+          <label className="text-sm text-muted-foreground block mb-2">
+            Ejercicio{isCombined && <span className="text-primary"> — combinando {selectedExercises.length}</span>}
+          </label>
+          {/* Chips de ejercicios elegidos */}
+          {hasExercises && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {selectedExercises.map(e => (
+                <span key={e.id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/30 px-2.5 py-1 text-sm font-medium text-primary">
+                  {e.name}
+                  <button onClick={() => removeExercise(e.id)}><X className="h-3.5 w-3.5 text-primary/60 hover:text-primary" /></button>
+                </span>
+              ))}
             </div>
           )}
-          {!selectedExercise && exerciseSearch && selectedClient && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={!selectedClient ? "Primero elegí un cliente" : hasExercises ? "Sumar otro ejercicio equivalente..." : "Escribí el ejercicio..."}
+              className="pl-10"
+              value={exerciseSearch}
+              onChange={e => setExerciseSearch(e.target.value)}
+              disabled={!selectedClient}
+            />
+          </div>
+          {exerciseSearch && selectedClient && (
             <div className="mt-1 border border-border rounded-lg bg-card overflow-hidden max-h-48 overflow-y-auto">
-              {exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase())).map(e => (
+              {exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase()) && !exerciseIds.includes(e.id)).map(e => (
                 <button
                   key={e.id}
-                  onClick={() => { setSelectedExercise(e.id); setSelectedExerciseName(e.name); setExerciseSearch(""); setExcludedDates(new Set()); }}
+                  onClick={() => addExercise(e)}
                   className="w-full text-left px-3 py-2.5 hover:bg-secondary/60 text-sm text-foreground border-b border-border/40 last:border-0 transition-colors"
                 >
                   {e.name}
                 </button>
               ))}
-              {!exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase())).length && (
+              {!exercises?.filter(e => e.name.toLowerCase().includes(exerciseSearch.toLowerCase()) && !exerciseIds.includes(e.id)).length && (
                 <p className="text-xs text-muted-foreground px-3 py-2.5">Sin resultados.</p>
               )}
             </div>
+          )}
+          {isCombined && (
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Se combinan como un solo ejercicio: el gráfico toma el máximo por sesión entre todos.
+            </p>
           )}
         </div>
 
       </div>
 
       {/* Contenido */}
-      {!selectedClient || !selectedExercise ? (
+      {!selectedClient || !hasExercises ? (
         <div className="text-center py-20 text-muted-foreground">
           <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
-          <p>Elegí un cliente y un ejercicio para ver la progresión.</p>
+          <p>Elegí un cliente y uno o más ejercicios para ver la progresión.</p>
         </div>
       ) : isLoading ? (
         <div className="text-center py-20 text-muted-foreground">Cargando...</div>
@@ -306,6 +328,7 @@ export default function StatsPage() {
                 <thead>
                   <tr className="border-b border-border bg-secondary/30">
                     <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Fecha</th>
+                    {isCombined && <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Ejercicio</th>}
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Serie</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Reps</th>
                     <th className="text-center px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Peso</th>
@@ -326,6 +349,7 @@ export default function StatsPage() {
                             : <span className="text-muted-foreground">—</span>
                           }
                         </td>
+                        {isCombined && <td className="px-4 py-3 text-left text-xs text-muted-foreground">{log.exercises?.name ?? "—"}</td>}
                         <td className="px-4 py-3 text-center text-muted-foreground">{log.set_number}</td>
                         <td className="px-4 py-3 text-center text-foreground">{log.reps_done ?? "—"}</td>
                         <td className={`px-4 py-3 text-center font-medium text-primary ${excluded ? "line-through" : ""}`}>
