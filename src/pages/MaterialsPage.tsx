@@ -14,7 +14,7 @@ import GymMapEditor from "@/components/GymMapEditor";
 // turno agrupados por bloque, con cuántos alumnos usan cada uno (para detectar
 // embotellamiento). NO modifica nada del Modo Sala ni del registro.
 
-type OccItem = { block: number; name: string; count: number; categoryId: string | null };
+type OccItem = { block: number; name: string; count: number; categoryId: string | null; students: string[] };
 // Demanda de un material en un bloque del turno vs. stock disponible (Fase 2 · Paso 4)
 type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number; students: number };
 
@@ -25,6 +25,7 @@ export default function MaterialsPage() {
   const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
   const [showMembers, setShowMembers] = useState(false); // desplegar lista de alumnos del turno
+  const [expandedOcc, setExpandedOcc] = useState<string | null>(null); // ejercicio expandido (ver alumnos)
 
   const { data: categories } = useQuery({
     queryKey: ["exercise-categories"],
@@ -116,6 +117,7 @@ export default function MaterialsPage() {
       }
 
       // 6. Contar alumnos distintos por (bloque, ejercicio) y ordenar por demanda
+      const nameById = new Map(memberList.map(m => [m.id, m.name]));
       const byKey = new Map<string, { block: number; name: string; categoryId: string | null; set: Set<string> }>();
       for (const r of rows) {
         const key = `${r.block}__${r.name}`;
@@ -123,7 +125,10 @@ export default function MaterialsPage() {
         byKey.get(key)!.set.add(r.clientId);
       }
       const items: OccItem[] = [...byKey.values()]
-        .map(v => ({ block: v.block, name: v.name, count: v.set.size, categoryId: v.categoryId }))
+        .map(v => ({
+          block: v.block, name: v.name, count: v.set.size, categoryId: v.categoryId,
+          students: [...v.set].map(id => nameById.get(id) ?? "—").sort((a, b) => a.localeCompare(b)),
+        }))
         .sort((a, b) => b.count - a.count || a.block - b.block || a.name.localeCompare(b.name));
 
       // 7. Demanda por material (Fase 2 · Paso 4): mapeo ejercicio→materiales y stock.
@@ -437,24 +442,42 @@ export default function MaterialsPage() {
 
               {/* Ranking con barras — el más pedido arriba */}
               <div className="bg-card border border-border rounded-xl divide-y divide-border/60 overflow-hidden">
-                {items.map((it, i) => (
-                  <div key={i} className="flex items-center gap-3 px-3 py-2.5">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-sm font-medium text-foreground truncate">{it.name}</span>
-                        <span className={`text-sm font-bold shrink-0 ${textColor(it.count)}`}>
-                          {it.count} <span className="text-[10px] font-normal text-muted-foreground">alumno{it.count > 1 ? "s" : ""}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                          <div className={`h-full rounded-full ${barColor(it.count)}`} style={{ width: `${(it.count / maxCount) * 100}%` }} />
+                {items.map((it, i) => {
+                  const key = `${it.block}__${it.name}`;
+                  const open = expandedOcc === key;
+                  return (
+                    <div key={i} className="px-3 py-2.5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-sm font-medium text-foreground truncate">{it.name}</span>
+                            <button
+                              onClick={() => setExpandedOcc(open ? null : key)}
+                              title="Ver alumnos que hacen este ejercicio"
+                              className={`inline-flex items-center gap-1 shrink-0 rounded-md px-1.5 py-0.5 hover:bg-secondary transition-colors text-sm font-bold ${textColor(it.count)}`}
+                            >
+                              {it.count} <span className="text-[10px] font-normal text-muted-foreground">alumno{it.count > 1 ? "s" : ""}</span>
+                              {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor(it.count)}`} style={{ width: `${(it.count / maxCount) * 100}%` }} />
+                            </div>
+                            <span className="text-[9px] text-muted-foreground shrink-0">Bloque {it.block}</span>
+                          </div>
                         </div>
-                        <span className="text-[9px] text-muted-foreground shrink-0">Bloque {it.block}</span>
                       </div>
+                      {open && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {it.students.length ? it.students.map((n, j) => (
+                            <span key={j} className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground">{n}</span>
+                          )) : <span className="text-xs text-muted-foreground">Sin alumnos.</span>}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
