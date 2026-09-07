@@ -24,6 +24,7 @@ export default function MaterialsPage() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>(""); // "" = todas
+  const [filterBlock, setFilterBlock] = useState<string>(""); // "" = todos los bloques
   const [showMembers, setShowMembers] = useState(false); // desplegar lista de alumnos del turno
   const [expandedOcc, setExpandedOcc] = useState<string | null>(null); // ejercicio expandido (ver alumnos)
 
@@ -192,13 +193,20 @@ export default function MaterialsPage() {
   const textColor = (count: number) =>
     count >= 3 ? "text-destructive" : count === 2 ? "text-amber-500" : "text-muted-foreground";
 
-  const items = (overview?.items ?? []).filter(i => !filterCategory || i.categoryId === filterCategory);
+  // Bloques disponibles ese día (para el filtro)
+  const blocks = [...new Set([
+    ...(overview?.items ?? []).map(i => i.block),
+    ...(overview?.matItems ?? []).map(m => m.block),
+  ])].sort((a, b) => a - b);
+  const byBlock = (b: number) => !filterBlock || b === Number(filterBlock);
+
+  const items = (overview?.items ?? []).filter(i => (!filterCategory || i.categoryId === filterCategory) && byBlock(i.block));
   const maxCount = Math.max(1, ...items.map(i => i.count));
   const hotspots = items.filter(i => i.count >= 3);
   const watch = items.filter(i => i.count === 2);
 
   // Vista por material (Paso 4): demanda vs stock
-  const matItems = overview?.matItems ?? [];
+  const matItems = (overview?.matItems ?? []).filter(m => byBlock(m.block));
   const matShortages = matItems.filter(m => m.demand > m.stock);
   const maxMatDemand = Math.max(1, ...matItems.map(m => Math.max(m.demand, m.stock)));
 
@@ -328,24 +336,36 @@ export default function MaterialsPage() {
             </div>
           )}
 
-          {/* Sub-toggle: por ejercicio / por material */}
-          <div className="flex gap-1 mb-4 bg-secondary/60 p-1 rounded-lg w-fit">
-            <button
-              onClick={() => setOccView("ejercicio")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                occView === "ejercicio" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Por ejercicio
-            </button>
-            <button
-              onClick={() => setOccView("material")}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                occView === "material" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Por material
-            </button>
+          {/* Sub-toggle: por ejercicio / por material + filtro por bloque */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <div className="flex gap-1 bg-secondary/60 p-1 rounded-lg w-fit">
+              <button
+                onClick={() => setOccView("ejercicio")}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  occView === "ejercicio" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Por ejercicio
+              </button>
+              <button
+                onClick={() => setOccView("material")}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  occView === "material" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Por material
+              </button>
+            </div>
+            {blocks.length > 1 && (
+              <select
+                value={filterBlock}
+                onChange={e => setFilterBlock(e.target.value)}
+                className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground"
+              >
+                <option value="">Todos los bloques</option>
+                {blocks.map(b => <option key={b} value={b}>Bloque {b}</option>)}
+              </select>
+            )}
           </div>
 
           {isLoading ? (
