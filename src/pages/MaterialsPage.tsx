@@ -2,12 +2,11 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, Plus, Pencil, Trash2, Check, X, Search, Map as MapIcon } from "lucide-react";
+import { Boxes, Users, CalendarDays, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, Plus, Pencil, Trash2, Check, X, Search } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmDialog";
-import GymMapEditor from "@/components/GymMapEditor";
 
 // ─── Fase 1: Ocupación de materiales por turno ──────────────────────────────
 // Lee los turnos del Modo Sala y, para un día, muestra los ejercicios de cada
@@ -19,7 +18,7 @@ type OccItem = { block: number; name: string; count: number; categoryId: string 
 type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number; students: number };
 
 export default function MaterialsPage() {
-  const [mainView, setMainView] = useState<"ocupacion" | "inventario" | "grupos" | "plano">("ocupacion");
+  const [mainView, setMainView] = useState<"ocupacion" | "inventario" | "grupos">("ocupacion");
   const [occView, setOccView] = useState<"ejercicio" | "material">("ejercicio"); // sub-vista de Ocupación
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTurno, setSelectedTurno] = useState<string>("");
@@ -263,22 +262,12 @@ export default function MaterialsPage() {
         >
           <Users className="h-4 w-4" /> Grupos
         </button>
-        <button
-          onClick={() => setMainView("plano")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            mainView === "plano" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <MapIcon className="h-4 w-4" /> Plano
-        </button>
       </div>
 
       {mainView === "inventario" ? (
         <InventoryManager />
       ) : mainView === "grupos" ? (
         <SharingGroupsManager />
-      ) : mainView === "plano" ? (
-        <GymMapEditor />
       ) : (
       <>
       <p className="text-muted-foreground mb-4 text-sm">
