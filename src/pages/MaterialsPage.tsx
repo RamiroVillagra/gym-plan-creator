@@ -15,7 +15,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 
 type OccItem = { block: number; name: string; count: number; categoryId: string | null; students: string[] };
 // Demanda de un material en un bloque del turno vs. stock disponible (Fase 2 · Paso 4)
-type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number; students: number };
+type MatItem = { block: number; materialId: string; name: string; demand: number; stock: number; students: number; exercises: string[] };
 
 export default function MaterialsPage() {
   const [mainView, setMainView] = useState<"ocupacion" | "inventario" | "grupos">("ocupacion");
@@ -26,6 +26,7 @@ export default function MaterialsPage() {
   const [filterBlock, setFilterBlock] = useState<string>(""); // "" = todos los bloques
   const [showMembers, setShowMembers] = useState(false); // desplegar lista de alumnos del turno
   const [expandedOcc, setExpandedOcc] = useState<string | null>(null); // ejercicio expandido (ver alumnos)
+  const [expandedMat, setExpandedMat] = useState<string | null>(null); // material expandido (ver ejercicios)
 
   const { data: categories } = useQuery({
     queryKey: ["exercise-categories"],
@@ -155,6 +156,7 @@ export default function MaterialsPage() {
         // Por (bloque, material): unidades que ocupa cada alumno = máx entre sus ejercicios del bloque.
         // Demanda del bloque = suma de las unidades por alumno (evita contar dos veces al mismo alumno).
         const perStudent = new Map<string, Map<string, number>>(); // key block__material -> (clientId -> units)
+        const perMatExercises = new Map<string, Set<string>>(); // key block__material -> ejercicios que lo usan
         for (const r of rows) {
           if (!r.exerciseId) continue;
           const usage = exToMats.get(r.exerciseId);
@@ -164,6 +166,8 @@ export default function MaterialsPage() {
             if (!perStudent.has(key)) perStudent.set(key, new Map());
             const sm = perStudent.get(key)!;
             sm.set(r.clientId, Math.max(sm.get(r.clientId) ?? 0, u.units));
+            if (!perMatExercises.has(key)) perMatExercises.set(key, new Set());
+            perMatExercises.get(key)!.add(r.name);
           }
         }
         matItems = [...perStudent.entries()].map(([key, sm]) => {
@@ -178,7 +182,8 @@ export default function MaterialsPage() {
             contributions.set(ckey, Math.max(contributions.get(ckey) ?? 0, units));
           }
           const demand = [...contributions.values()].reduce((a, b) => a + b, 0);
-          return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0, students: sm.size };
+          const exercises = [...(perMatExercises.get(key) ?? [])].sort((a, b) => a.localeCompare(b));
+          return { block: Number(blockStr), materialId, name: info?.name ?? "—", demand, stock: info?.stock ?? 0, students: sm.size, exercises };
         }).sort((a, b) => (b.demand - b.stock) - (a.demand - a.stock) || b.demand - a.demand || a.block - b.block);
       }
 
@@ -388,29 +393,48 @@ export default function MaterialsPage() {
                   {matItems.map((m, i) => {
                     const short = m.demand > m.stock;
                     const shared = Math.max(0, m.students - m.demand); // alumnos ahorrados por grupos compartidos
+                    const key = `${m.block}__${m.materialId}`;
+                    const open = expandedMat === key;
                     return (
-                      <div key={i} className="flex items-center gap-3 px-3 py-2.5">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-sm font-medium text-foreground truncate">
-                              {m.name}
-                              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
-                                {m.students} alumno{m.students !== 1 ? "s" : ""}
-                                {shared > 0 && <span className="text-primary"> · {shared} comparten</span>}
+                      <div key={i} className="px-3 py-2.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-sm font-medium text-foreground truncate">
+                                {m.name}
+                                <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                                  {m.students} alumno{m.students !== 1 ? "s" : ""}
+                                  {shared > 0 && <span className="text-primary"> · {shared} comparten</span>}
+                                </span>
                               </span>
-                            </span>
-                            <span className={`text-sm font-bold shrink-0 ${short ? "text-destructive" : "text-muted-foreground"}`}>
-                              {m.demand}<span className="text-[10px] font-normal text-muted-foreground">/{m.stock}</span>
-                              {short && <span className="ml-1 text-[10px] font-bold text-destructive">faltan {m.demand - m.stock}</span>}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                              <div className={`h-full rounded-full ${short ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${Math.min(100, (m.demand / maxMatDemand) * 100)}%` }} />
+                              <span className={`text-sm font-bold shrink-0 ${short ? "text-destructive" : "text-muted-foreground"}`}>
+                                {m.demand}<span className="text-[10px] font-normal text-muted-foreground">/{m.stock}</span>
+                                {short && <span className="ml-1 text-[10px] font-bold text-destructive">faltan {m.demand - m.stock}</span>}
+                              </span>
                             </div>
-                            <span className="text-[9px] text-muted-foreground shrink-0">Bloque {m.block}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
+                                <div className={`h-full rounded-full ${short ? "bg-destructive" : "bg-primary/70"}`} style={{ width: `${Math.min(100, (m.demand / maxMatDemand) * 100)}%` }} />
+                              </div>
+                              <button
+                                onClick={() => setExpandedMat(open ? null : key)}
+                                title="Ver ejercicios que usan este material"
+                                className="inline-flex items-center gap-0.5 shrink-0 rounded px-1 py-0.5 hover:bg-secondary transition-colors text-[9px] text-muted-foreground"
+                              >
+                                Bloque {m.block}
+                                {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
+                        {open && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="text-[10px] text-muted-foreground w-full">Ejercicios que usan {m.name}:</span>
+                            {m.exercises.length ? m.exercises.map((ex, j) => (
+                              <span key={j} className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground">{ex}</span>
+                            )) : <span className="text-xs text-muted-foreground">—</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
