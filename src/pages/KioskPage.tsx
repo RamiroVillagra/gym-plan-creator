@@ -315,6 +315,19 @@ export default function KioskPage() {
  
   const workoutIds = useMemo(() => todayWorkouts?.map((w: any) => w.id) ?? [], [todayWorkouts]);
 
+  // Asistencia: al abrir la sesión de un alumno en el kiosco, marcar opened_at
+  // la primera vez (preserva la primera apertura con .is("opened_at", null)).
+  useEffect(() => {
+    const toMark = (todayWorkouts ?? []).filter((w: any) => !w.opened_at).map((w: any) => w.id);
+    if (!toMark.length) return;
+    (supabase as any)
+      .from("assigned_workouts")
+      .update({ opened_at: new Date().toISOString() })
+      .in("id", toMark)
+      .is("opened_at", null)
+      .then(() => {});
+  }, [todayWorkouts]);
+
   const { data: assignedExercises } = useQuery({
     queryKey: ["kiosk-assigned-exercises", workoutIds],
     enabled: workoutIds.length > 0,

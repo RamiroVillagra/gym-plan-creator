@@ -269,6 +269,18 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = workout.workout_date === today;
 
+  // Asistencia: al abrir el entrenamiento, marcar opened_at la primera vez.
+  // El filtro .is("opened_at", null) preserva la hora de la PRIMERA apertura.
+  useEffect(() => {
+    if (workout.opened_at) return;
+    (supabase as any)
+      .from("assigned_workouts")
+      .update({ opened_at: new Date().toISOString() })
+      .eq("id", workout.id)
+      .is("opened_at", null)
+      .then(() => {});
+  }, [workout.id, workout.opened_at]);
+
   const { data: assignedExercises } = useQuery({
     queryKey: ["student-assigned-ex", workout.id],
     queryFn: async () => {

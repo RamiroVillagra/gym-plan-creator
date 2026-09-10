@@ -1055,6 +1055,7 @@ export default function CalendarPage() {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1 min-w-0 flex-1">
+                              <AttendanceBox w={w} />
                               <span className="text-foreground truncate font-medium">
                                 {isClientFiltered
                                   ? (w.routines?.name || "Entrenamiento libre")
@@ -1692,6 +1693,22 @@ export default function CalendarPage() {
   );
 }
 
+// Recuadro de asistencia: verde = abrió el entrenamiento (vino), rojo = no lo
+// abrió y la fecha ya pasó (no vino). Sin recuadro para sesiones futuras aún sin abrir.
+function AttendanceBox({ w, size = "sm" }: { w: any; size?: "sm" | "md" }) {
+  const todayStr = format(new Date(), "yyyy-MM-dd");
+  const present = !!w.opened_at;
+  const absent = !present && (w.workout_date ?? "") < todayStr;
+  if (!present && !absent) return null;
+  const dim = size === "md" ? "h-3.5 w-3.5" : "h-2.5 w-2.5";
+  return (
+    <span
+      className={`inline-block ${dim} rounded-sm shrink-0 ${present ? "bg-green-500" : "bg-red-500"}`}
+      title={present ? "Vino — abrió el entrenamiento" : "No vino — no abrió el entrenamiento"}
+    />
+  );
+}
+
 function DayView({ date, workouts, loggedWorkoutIds, aerobicWorkoutIds, role, isClientFiltered, onAdd, onDelete, onEdit, onViewDetail, onSaveDay, isSavingDay }: {
   date: Date; workouts: any[]; loggedWorkoutIds?: Set<string>; aerobicWorkoutIds?: Set<string>; role: string | null; isClientFiltered: boolean;
   onAdd: () => void; onDelete: (id: string) => void; onEdit: (w: any) => void; onViewDetail: (w: any) => void;
@@ -1721,6 +1738,7 @@ function DayView({ date, workouts, loggedWorkoutIds, aerobicWorkoutIds, role, is
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
+                  <AttendanceBox w={w} size="md" />
                   <p className="font-medium text-foreground">{w.clients?.name}</p>
                   {loggedWorkoutIds?.has(w.id) && (
                     <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" title="Sesión registrada" />
