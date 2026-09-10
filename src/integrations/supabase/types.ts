@@ -121,7 +121,6 @@ export type Database = {
           name: string
           notes: string | null
           phone: string | null
-          service: string | null
           user_id: string | null
         }
         Insert: {
@@ -131,7 +130,6 @@ export type Database = {
           name: string
           notes?: string | null
           phone?: string | null
-          service?: string | null
           user_id?: string | null
         }
         Update: {
@@ -141,7 +139,6 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
-          service?: string | null
           user_id?: string | null
         }
         Relationships: []

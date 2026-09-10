@@ -10,40 +10,8 @@ import { es } from "date-fns/locale";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import RoutineDetailView from "@/components/RoutineDetailView";
 import { useConfirm } from "@/components/ConfirmDialog";
-
-const SERVICES = [
-  { value: "delta_mas", label: "Delta Más" },
-  { value: "delta_academia", label: "Delta Academia" },
-] as const;
-
-const serviceLabel = (value: string | null) =>
-  SERVICES.find(s => s.value === value)?.label ?? null;
-
-
-// Si la columna "service" todavia no existe en la base —la migracion corre
-// aparte del deploy—, un insert/update que la incluya falla entero y rompe
-// alta y edicion de alumnos, que andaban antes de este cambio. Se reintenta
-// sin esa columna: el alumno se guarda igual, el servicio queda pendiente
-// hasta que la migracion corra.
-const COLUMNA_FALTANTE = "42703";
-
-async function guardarConFallbackDeService<T extends { service: string | null }>(
-  hacer: (payload: T) => PromiseLike<{ error: { code?: string; message: string } | null }>,
-  payload: T
-) {
-  const { error } = await hacer(payload);
-  if (error?.code === COLUMNA_FALTANTE) {
-    const { service: _omit, ...sinService } = payload;
-    const retry = await hacer(sinService as T);
-    if (retry.error) throw retry.error;
-    return;
-  }
-  if (error) throw error;
-}
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
@@ -54,10 +22,8 @@ export default function ClientsPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [service, setService] = useState<string>("none");
 
   const [selectedClient, setSelectedClient] = useState<any>(null);
-  const [serviceFilter, setServiceFilter] = useState<string>("all");
 
   // Planificar dialog
   const [assignOpen, setAssignOpen] = useState(false);
@@ -88,7 +54,6 @@ export default function ClientsPage() {
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
-  const [editService, setEditService] = useState<string>("none");
 
   const updateInfo = useMutation({
     mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
@@ -105,15 +70,12 @@ export default function ClientsPage() {
 
   const updateClient = useMutation({
     mutationFn: async () => {
-      await guardarConFallbackDeService(
-        payload => supabase.from("clients").update(payload).eq("id", editId),
-        {
-          name: editName.trim(),
-          email: editEmail.trim() || null,
-          phone: editPhone.trim() || null,
-          service: editService === "none" ? null : editService,
-        }
-      );
+      const { error } = await supabase.from("clients").update({
+        name: editName.trim(),
+        email: editEmail.trim() || null,
+        phone: editPhone.trim() || null,
+      }).eq("id", editId);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -124,7 +86,6 @@ export default function ClientsPage() {
           name: editName.trim(),
           email: editEmail.trim() || null,
           phone: editPhone.trim() || null,
-          service: editService === "none" ? null : editService,
         }));
       }
       setEditOpen(false);
@@ -195,18 +156,15 @@ export default function ClientsPage() {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      await guardarConFallbackDeService(
-        payload => supabase.from("clients").insert(payload),
-        {
-          name, email: email || null, phone: phone || null, notes: notes || null,
-          service: service === "none" ? null : service,
-        }
-      );
+      const { error } = await supabase.from("clients").insert({
+        name, email: email || null, phone: phone || null, notes: notes || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["clients-count"] });
-      setName(""); setEmail(""); setPhone(""); setNotes(""); setService("none");
+      setName(""); setEmail(""); setPhone(""); setNotes("");
       setOpen(false);
       toast.success("Alumno registrado");
     },
@@ -338,17 +296,9 @@ export default function ClientsPage() {
   });
 
   const filtered = clients?.filter(c =>
-    (c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email?.toLowerCase().includes(search.toLowerCase())) &&
-    (serviceFilter === "all" ||
-      (serviceFilter === "none" ? !c.service : c.service === serviceFilter))
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase())
   );
-
-  const serviceCounts = SERVICES.map(s => ({
-    ...s,
-    count: clients?.filter(c => c.service === s.value).length ?? 0,
-  }));
-  const sinServicioCount = clients?.filter(c => !c.service).length ?? 0;
 
   // Client detail panel
   if (selectedClient) {
@@ -363,12 +313,7 @@ export default function ClientsPage() {
 
         <div className="flex items-center justify-between mb-6">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-heading font-bold">{selectedClient.name}</h1>
-              {serviceLabel(selectedClient.service) && (
-                <Badge variant="secondary">{serviceLabel(selectedClient.service)}</Badge>
-              )}
-            </div>
+            <h1 className="text-3xl font-heading font-bold">{selectedClient.name}</h1>
             <div className="flex gap-3 mt-1 text-sm text-muted-foreground">
               {selectedClient.email && <span>{selectedClient.email}</span>}
               {selectedClient.phone && <span>{selectedClient.phone}</span>}
@@ -380,7 +325,6 @@ export default function ClientsPage() {
               setEditName(selectedClient.name);
               setEditEmail(selectedClient.email || "");
               setEditPhone(selectedClient.phone || "");
-              setEditService(selectedClient.service || "none");
               setEditOpen(true);
             }}>
               <Pencil className="h-4 w-4 mr-2" />Editar
@@ -624,57 +568,10 @@ export default function ClientsPage() {
               <Input placeholder="Email (opcional)" value={email} onChange={e => setEmail(e.target.value)} />
               <Input placeholder="Teléfono (opcional)" value={phone} onChange={e => setPhone(e.target.value)} />
               <Input placeholder="Notas (opcional)" value={notes} onChange={e => setNotes(e.target.value)} />
-              <Select value={service} onValueChange={setService}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Servicio" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin servicio</SelectItem>
-                  {SERVICES.map(s => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Button className="w-full" onClick={() => addMutation.mutate()} disabled={!name.trim()}>Guardar</Button>
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          onClick={() => setServiceFilter("all")}
-          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-            serviceFilter === "all"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Todos ({clients?.length ?? 0})
-        </button>
-        {serviceCounts.map(s => (
-          <button
-            key={s.value}
-            onClick={() => setServiceFilter(s.value)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              serviceFilter === s.value
-                ? "bg-primary text-primary-foreground border-primary"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {s.label} ({s.count})
-          </button>
-        ))}
-        <button
-          onClick={() => setServiceFilter("none")}
-          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-            serviceFilter === "none"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Sin servicio ({sinServicioCount})
-        </button>
       </div>
 
       <div className="relative mb-4">
@@ -698,14 +595,7 @@ export default function ClientsPage() {
             >
               <div className="flex items-center gap-2 min-w-0">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-foreground">{client.name}</p>
-                    {serviceLabel(client.service) && (
-                      <Badge variant="secondary" className="shrink-0">
-                        {serviceLabel(client.service)}
-                      </Badge>
-                    )}
-                  </div>
+                  <p className="font-medium text-foreground">{client.name}</p>
                   <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
                     {client.email && <span>{client.email}</span>}
                     {client.phone && <span>{client.phone}</span>}
@@ -736,7 +626,6 @@ export default function ClientsPage() {
                     setEditName(client.name);
                     setEditEmail(client.email || "");
                     setEditPhone(client.phone || "");
-                    setEditService(client.service || "none");
                     setEditOpen(true);
                   }}
                   title="Editar alumno"
@@ -759,17 +648,6 @@ export default function ClientsPage() {
             <Input placeholder="Nombre *" value={editName} onChange={e => setEditName(e.target.value)} />
             <Input placeholder="Email (opcional)" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
             <Input placeholder="Teléfono (opcional)" value={editPhone} onChange={e => setEditPhone(e.target.value)} />
-            <Select value={editService} onValueChange={setEditService}>
-              <SelectTrigger>
-                <SelectValue placeholder="Servicio" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sin servicio</SelectItem>
-                {SERVICES.map(s => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button
               className="w-full"
               onClick={() => updateClient.mutate()}
