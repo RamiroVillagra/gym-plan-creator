@@ -280,10 +280,12 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const replaceCat = replaceTarget
     ? ((exercises?.find(e => e.id === replaceTarget.exercise_id) as any)?.category_id ?? null)
     : null;
+  // Ejercicios ya presentes en el día (para no sugerir duplicados)
+  const inUseExerciseIds = new Set((_currentDayEx ?? []).map((re: any) => re.exercise_id));
   const changeSuggestions = (replaceTarget && recentUsage)
     ? [...recentUsage.entries()]
         .map(([exId, lastDate]) => ({ ex: exercises?.find(e => e.id === exId) as any, lastDate }))
-        .filter(s => s.ex && s.ex.id !== replaceTarget.exercise_id
+        .filter(s => s.ex && !inUseExerciseIds.has(s.ex.id)
           && (s.ex.category_id ?? null) === replaceCat
           && (((s.ex.type as string) ?? "strength") === dayType))
         .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
