@@ -287,6 +287,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
           && (s.ex.category_id ?? null) === replaceCat
           && (((s.ex.type as string) ?? "strength") === dayType))
         .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
+        .slice(0, 5)
     : [];
   const fmtAgo = (d: string) => {
     const n = Math.round((Date.now() - new Date(d + "T12:00:00").getTime()) / 86400000);
@@ -1357,7 +1358,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                 {/* Sugeridos (solo al cambiar): últimos de la misma categoría, 3 meses */}
                 {replaceTarget && changeSuggestions.length > 0 && (
                   <div>
-                    <label className="text-xs text-muted-foreground">Sugeridos — últimos de esta categoría (3 meses)</label>
+                    <label className="text-xs text-muted-foreground">Últimos 5 usados en esta categoría (3 meses)</label>
                     <div className="mt-1 border border-primary/30 bg-primary/5 rounded-lg overflow-hidden max-h-44 overflow-y-auto">
                       {changeSuggestions.map(s => (
                         <button
@@ -1371,7 +1372,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                         </button>
                       ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">O buscá cualquier otro más abajo.</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">O elegí cualquier otro de la lista completa, abajo.</p>
                   </div>
                 )}
 
@@ -1404,7 +1405,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                 {/* 3. Lista de ejercicios con selección múltiple */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs text-muted-foreground">Ejercicios</label>
+                    <label className="text-xs text-muted-foreground">{replaceTarget ? "Todos los ejercicios" : "Ejercicios"}</label>
                     <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setCreateExOpen(true)}>
                       <PlusCircle className="h-3 w-3 mr-1" />Nuevo
                     </Button>
