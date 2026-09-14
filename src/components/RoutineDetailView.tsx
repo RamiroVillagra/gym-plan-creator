@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { format, addDays, startOfWeek } from "date-fns";
+import { format, addDays, startOfWeek, subMonths } from "date-fns";
+import { es } from "date-fns/locale";
+
 import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { UndoEntry } from "@/pages/CalendarPage";
@@ -242,12 +244,54 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     enabled: editable,
   });
 
+  // Uso reciente del alumno (últimos 3 meses): exercise_id -> fecha más reciente.
+  // Alimenta las sugerencias del botón "Cambiar" (últimos de la misma categoría).
+  const { data: recentUsage } = useQuery({
+    queryKey: ["cambiar-recent", clientId],
+    enabled: editable && !!clientId,
+    queryFn: async () => {
+      const since = format(subMonths(new Date(), 3), "yyyy-MM-dd");
+      const { data, error } = await supabase
+        .from("workout_logs")
+        .select("exercise_id, assigned_workouts!inner(workout_date, client_id)")
+        .eq("assigned_workouts.client_id", clientId!)
+        .gte("assigned_workouts.workout_date", since);
+      if (error) throw error;
+      const latest = new Map<string, string>();
+      for (const r of (data ?? []) as any[]) {
+        const d = r.assigned_workouts?.workout_date;
+        if (!d) continue;
+        const prev = latest.get(r.exercise_id);
+        if (!prev || d > prev) latest.set(r.exercise_id, d);
+      }
+      return latest;
+    },
+  });
+
   const invalidateKey = isOverrideMode
     ? ["assigned-workout-exercises", assignedWorkoutId]
     : ["routine-exercises", routineId];
 
   // Categorías del tipo del día (en un día aeróbico no aparecen las categorías de fuerza)
   const dayCategories = categories?.filter(c => (((c as any).type as string) ?? "strength") === dayType) ?? [];
+
+  // Sugerencias para "Cambiar": ejercicios de la MISMA categoría que el alumno
+  // hizo en los últimos 3 meses, del más reciente al más viejo.
+  const replaceCat = replaceTarget
+    ? ((exercises?.find(e => e.id === replaceTarget.exercise_id) as any)?.category_id ?? null)
+    : null;
+  const changeSuggestions = (replaceTarget && recentUsage)
+    ? [...recentUsage.entries()]
+        .map(([exId, lastDate]) => ({ ex: exercises?.find(e => e.id === exId) as any, lastDate }))
+        .filter(s => s.ex && s.ex.id !== replaceTarget.exercise_id
+          && (s.ex.category_id ?? null) === replaceCat
+          && (((s.ex.type as string) ?? "strength") === dayType))
+        .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
+    : [];
+  const fmtAgo = (d: string) => {
+    const n = Math.round((Date.now() - new Date(d + "T12:00:00").getTime()) / 86400000);
+    return n <= 0 ? "hoy" : n === 1 ? "ayer" : n < 30 ? `hace ${n} días` : format(new Date(d + "T12:00:00"), "d MMM", { locale: es });
+  };
 
   // Filtrar ejercicios por tipo del día (fuerza/aeróbico), categoría y búsqueda
   const filteredExercises = exercises?.filter(ex => {
@@ -1309,6 +1353,27 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>{replaceTarget ? "Cambiar ejercicio" : `Agregar Ejercicios - Día ${selectedDay}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
+
+                {/* Sugeridos (solo al cambiar): últimos de la misma categoría, 3 meses */}
+                {replaceTarget && changeSuggestions.length > 0 && (
+                  <div>
+                    <label className="text-xs text-muted-foreground">Sugeridos — últimos de esta categoría (3 meses)</label>
+                    <div className="mt-1 border border-primary/30 bg-primary/5 rounded-lg overflow-hidden max-h-44 overflow-y-auto">
+                      {changeSuggestions.map(s => (
+                        <button
+                          key={s.ex.id}
+                          type="button"
+                          onClick={() => replaceExercise.mutate({ re: replaceTarget, newExId: s.ex.id })}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors flex items-center justify-between gap-2"
+                        >
+                          <span className="text-foreground truncate">{s.ex.name}</span>
+                          <span className="text-[11px] text-muted-foreground shrink-0">{fmtAgo(s.lastDate)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">O buscá cualquier otro más abajo.</p>
+                  </div>
+                )}
 
                 {/* 1. Bloque (solo al agregar) */}
                 {!replaceTarget && (
