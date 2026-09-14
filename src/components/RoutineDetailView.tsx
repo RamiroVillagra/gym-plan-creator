@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { format, addDays, startOfWeek, subMonths } from "date-fns";
+import { format, addDays, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { es } from "date-fns/locale";
@@ -268,6 +268,43 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
     },
   });
 
+  // Ejercicios planificados para el alumno en TODA la semana del entrenamiento
+  // (todos los días, resolviendo overrides + rutina base). Se excluyen de las
+  // sugerencias para no repetir el mismo ejercicio en otro día de la semana.
+  const { data: weekExerciseIds } = useQuery({
+    queryKey: ["cambiar-week", assignedWorkoutId, clientId],
+    enabled: editable && !!clientId && !!assignedWorkoutId,
+    queryFn: async () => {
+      const set = new Set<string>();
+      const { data: cur } = await supabase.from("assigned_workouts").select("workout_date").eq("id", assignedWorkoutId!).single();
+      if (!cur) return set;
+      const d = new Date((cur as any).workout_date + "T12:00:00");
+      const start = format(startOfWeek(d, { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const end = format(endOfWeek(d, { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const { data: ws } = await supabase
+        .from("assigned_workouts").select("id, routine_id, day_number")
+        .eq("client_id", clientId!).gte("workout_date", start).lte("workout_date", end);
+      if (!ws?.length) return set;
+      const ids = ws.map((w: any) => w.id);
+      const { data: ov } = await supabase
+        .from("assigned_workout_exercises").select("assigned_workout_id, exercise_id").in("assigned_workout_id", ids);
+      const withOv = new Set((ov ?? []).map((o: any) => o.assigned_workout_id));
+      for (const o of (ov ?? []) as any[]) set.add(o.exercise_id);
+      const missing = ws.filter((w: any) => !withOv.has(w.id) && w.routine_id);
+      const routineIds = [...new Set(missing.map((w: any) => w.routine_id))];
+      if (routineIds.length) {
+        const { data: base } = await supabase
+          .from("routine_exercises").select("routine_id, day_number, exercise_id").in("routine_id", routineIds as string[]);
+        for (const w of missing as any[]) {
+          for (const b of (base ?? []) as any[]) {
+            if (b.routine_id === w.routine_id && (b.day_number ?? 1) === (w.day_number ?? 1)) set.add(b.exercise_id);
+          }
+        }
+      }
+      return set;
+    },
+  });
+
   const invalidateKey = isOverrideMode
     ? ["assigned-workout-exercises", assignedWorkoutId]
     : ["routine-exercises", routineId];
@@ -280,8 +317,11 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const replaceCat = replaceTarget
     ? ((exercises?.find(e => e.id === replaceTarget.exercise_id) as any)?.category_id ?? null)
     : null;
-  // Ejercicios ya presentes en el día (para no sugerir duplicados)
-  const inUseExerciseIds = new Set((_currentDayEx ?? []).map((re: any) => re.exercise_id));
+  // Ejercicios ya presentes esta semana (día actual + resto de la semana) para no repetir
+  const inUseExerciseIds = new Set<string>([
+    ...(_currentDayEx ?? []).map((re: any) => re.exercise_id),
+    ...(weekExerciseIds ? [...weekExerciseIds] : []),
+  ]);
   const changeSuggestions = (replaceTarget && recentUsage)
     ? [...recentUsage.entries()]
         .map(([exId, lastDate]) => ({ ex: exercises?.find(e => e.id === exId) as any, lastDate }))
