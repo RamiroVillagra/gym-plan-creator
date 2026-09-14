@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search } from "lucide-react";
+import { Plus, Trash2, Save, PlusCircle, History, ChevronUp, ChevronDown, Layers, LibraryBig, Trophy, Copy, Search, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { format, addDays, startOfWeek } from "date-fns";
@@ -29,6 +29,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const [addExOpen, setAddExOpen] = useState(false);
   const [addExBlock, setAddExBlock] = useState(1);
   const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
+  // Reemplazar un ejercicio existente: guarda la fila a cambiar; abre el mismo box
+  const [replaceTarget, setReplaceTarget] = useState<any | null>(null);
+
   const [sets, setSets] = useState("3");
   const [reps, setReps] = useState("10");
   const [weight, setWeight] = useState("");
@@ -330,6 +333,47 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         onUndo?.({ type: "awe-delete", label: "Eliminar ejercicio", row: data.row, table: data.table as any });
       }
     },
+  });
+
+  // Cambiar el ejercicio de una fila existente (conserva series/reps/peso/bloque).
+  // En modo override, si todavía no hay overrides, se clonan y se matchea la fila.
+  const replaceExercise = useMutation({
+    mutationFn: async ({ re, newExId }: { re: any; newExId: string }) => {
+      const table = isOverrideMode ? "assigned_workout_exercises" : "routine_exercises";
+      if (isOverrideMode && !hasOverrides) {
+        await ensureOverrides();
+        const { data: cloned } = await supabase
+          .from("assigned_workout_exercises")
+          .select("id")
+          .eq("assigned_workout_id", assignedWorkoutId!)
+          .eq("exercise_id", re.exercise_id)
+          .eq("day_number", re.day_number)
+          .eq("block_number", re.block_number)
+          .eq("order_index", re.order_index)
+          .single();
+        if (cloned) {
+          const { error } = await supabase.from("assigned_workout_exercises").update({ exercise_id: newExId }).eq("id", cloned.id);
+          if (error) throw error;
+          return true;
+        }
+        queryClient.invalidateQueries({ queryKey: invalidateKey });
+        toast.info("Datos clonados. Intentá de nuevo.");
+        return false;
+      }
+      const { error } = await supabase.from(table).update({ exercise_id: newExId }).eq("id", re.id);
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: (ok) => {
+      queryClient.invalidateQueries({ queryKey: invalidateKey });
+      if (ok) {
+        setReplaceTarget(null);
+        setAddExOpen(false);
+        setFilterCategory(""); setFilterSearch("");
+        toast.success("Ejercicio cambiado");
+      }
+    },
+    onError: () => toast.error("No se pudo cambiar el ejercicio"),
   });
 
   const updateExercise = useMutation({
@@ -1133,6 +1177,19 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 >
                                   <Layers className={`h-3 w-3 ${re.set_groups?.length ? "text-primary" : "text-muted-foreground"}`} />
                                 </Button>
+                                <Button
+                                  variant="ghost" size="icon" className="h-6 w-6"
+                                  title="Cambiar ejercicio"
+                                  onClick={() => {
+                                    setReplaceTarget(re);
+                                    setSelectedExercises(new Set());
+                                    setFilterCategory(""); setFilterSearch("");
+                                    setAddExBlock(re.block_number ?? 1);
+                                    setAddExOpen(true);
+                                  }}
+                                >
+                                  <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                                </Button>
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteExercise.mutate(re.id)}>
                                   <Trash2 className="h-3 w-3 text-destructive" />
                                 </Button>
@@ -1246,17 +1303,20 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
               setFilterCategory("");
               setFilterSearch("");
               setSelectedExercises(new Set());
+              setReplaceTarget(null);
             }
           }}>
             <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Agregar Ejercicios - Día {selectedDay}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{replaceTarget ? "Cambiar ejercicio" : `Agregar Ejercicios - Día ${selectedDay}`}</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
 
-                {/* 1. Bloque */}
+                {/* 1. Bloque (solo al agregar) */}
+                {!replaceTarget && (
                 <div>
                   <label className="text-xs text-muted-foreground">Bloque</label>
                   <Input type="number" min="1" className="mt-1" value={addExBlock} onChange={e => setAddExBlock(e.target.value === "" ? 1 : parseInt(e.target.value) || 1)} onFocus={e => e.target.select()} />
                 </div>
+                )}
 
                 {/* 2. Categoría */}
                 <div>
@@ -1304,6 +1364,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               key={ex.id}
                               type="button"
                               onClick={() => {
+                                if (replaceTarget) {
+                                  replaceExercise.mutate({ re: replaceTarget, newExId: ex.id });
+                                  return;
+                                }
                                 setSelectedExercises(prev => {
                                   const next = new Set(prev);
                                   next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id);
@@ -1348,13 +1412,19 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                   </div>
                 )}
 
-                <Button
-                  className="w-full"
-                  onClick={() => addExercise.mutate()}
-                  disabled={selectedExercises.size === 0}
-                >
-                  Agregar {selectedExercises.size > 0 ? `${selectedExercises.size} ejercicio${selectedExercises.size > 1 ? "s" : ""}` : ""}
-                </Button>
+                {replaceTarget ? (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Elegí un ejercicio de la lista para reemplazar el actual. Se conservan series, reps y peso.
+                  </p>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={() => addExercise.mutate()}
+                    disabled={selectedExercises.size === 0}
+                  >
+                    Agregar {selectedExercises.size > 0 ? `${selectedExercises.size} ejercicio${selectedExercises.size > 1 ? "s" : ""}` : ""}
+                  </Button>
+                )}
               </div>
             </DialogContent>
           </Dialog>

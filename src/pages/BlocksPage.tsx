@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Pencil, X, Search, Layers, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Search, Layers, ChevronUp, ChevronDown, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -27,6 +27,8 @@ export default function BlocksPage() {
   const [blockDesc, setBlockDesc] = useState("");
   const [blockExs, setBlockExs] = useState<BlockExercise[]>([]);
   const [exSearch, setExSearch] = useState("");
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null); // fila a cambiar (null = agregar)
+
 
   const { data: blocks, isLoading } = useQuery({
     queryKey: ["workout-blocks"],
@@ -304,7 +306,15 @@ export default function BlocksPage() {
                           >
                             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                           </button>
-                          <button onClick={() => setBlockExs(prev => prev.filter((_, j) => j !== i))}>
+                          <button
+                            type="button"
+                            title="Cambiar ejercicio"
+                            onClick={() => { setReplaceIndex(i); setExSearch(""); }}
+                            className={`p-0.5 rounded hover:bg-secondary transition-colors ${replaceIndex === i ? "bg-primary/15" : ""}`}
+                          >
+                            <ArrowLeftRight className={`h-3.5 w-3.5 ${replaceIndex === i ? "text-primary" : "text-muted-foreground"}`} />
+                          </button>
+                          <button onClick={() => { setBlockExs(prev => prev.filter((_, j) => j !== i)); if (replaceIndex === i) setReplaceIndex(null); }}>
                             <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive transition-colors ml-1" />
                           </button>
                         </div>
@@ -371,13 +381,23 @@ export default function BlocksPage() {
                 </div>
               )}
 
+              {/* Aviso de modo cambiar */}
+              {replaceIndex !== null && (
+                <div className="flex items-center justify-between gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-2">
+                  <span className="text-xs text-primary font-medium">
+                    Cambiando "{blockExs[replaceIndex]?.exercise_name}" — elegí el reemplazo abajo.
+                  </span>
+                  <button type="button" onClick={() => setReplaceIndex(null)} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+                </div>
+              )}
+
               {/* Buscador de ejercicios */}
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="flex items-center px-3 py-2 border-b border-border bg-secondary/20">
                   <Search className="h-3.5 w-3.5 text-muted-foreground mr-2 shrink-0" />
                   <Input
                     className="h-7 text-xs border-0 p-0 focus-visible:ring-0 bg-transparent"
-                    placeholder="Buscar ejercicio para agregar..."
+                    placeholder={replaceIndex !== null ? "Elegí el ejercicio de reemplazo..." : "Buscar ejercicio para agregar..."}
                     value={exSearch}
                     onChange={e => setExSearch(e.target.value)}
                   />
@@ -389,16 +409,25 @@ export default function BlocksPage() {
                     ) : (
                       filteredEx.map(ex => {
                         const already = blockExs.some(e => e.exercise_id === ex.id);
+                        const replacing = replaceIndex !== null;
                         return (
                           <button
                             key={ex.id}
                             type="button"
-                            disabled={already}
-                            onClick={() => addExercise(ex)}
+                            disabled={!replacing && already}
+                            onClick={() => {
+                              if (replacing) {
+                                setBlockExs(prev => prev.map((x, j) => j === replaceIndex ? { ...x, exercise_id: ex.id, exercise_name: ex.name } : x));
+                                setReplaceIndex(null);
+                                setExSearch("");
+                              } else {
+                                addExercise(ex);
+                              }
+                            }}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-secondary transition-colors flex items-center justify-between disabled:opacity-40 disabled:cursor-default"
                           >
                             <span>{ex.name}</span>
-                            {already && <span className="text-xs text-primary font-medium">Ya agregado</span>}
+                            {!replacing && already && <span className="text-xs text-primary font-medium">Ya agregado</span>}
                           </button>
                         );
                       })
