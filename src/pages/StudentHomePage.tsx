@@ -471,6 +471,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
                 reps={re.reps}
                 weight={re.weight}
                 unit={re.unit ?? "kg"}
+                distance={re.distance ?? null}
                 setGroups={re.set_groups}
                 coachNotes={re.notes ?? null}
                 workoutType={re.workout_type ?? "strength"}
@@ -551,10 +552,10 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const ExerciseCard = forwardRef(function ExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", distance = null, setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet,
   workoutType = "strength", duration, distanceM, micro, macro,
 }: {
-  exercise: any; sets: number; reps: number; weight: number | null; unit?: string;
+  exercise: any; sets: number; reps: number; weight: number | null; unit?: string; distance?: number | null;
   setGroups?: { sets: number; reps: number; weight: number | null }[] | null;
   coachNotes?: string | null;
   exerciseId: string; existingLogs: any[]; prevLogs: any[];
@@ -742,6 +743,9 @@ const ExerciseCard = forwardRef(function ExerciseCard({
     );
   }
 
+  // Valor secundario del plan de fuerza (RIR u otra unidad: cm/m/seg)
+  const secondaryStr = distance != null ? (unit === "rir" ? `RIR ${distance}` : `${distance} ${unit}`) : "";
+
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -763,11 +767,12 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           {setGroups?.length ? (
             <div className="text-right">
               {setGroups.map((g, i) => (
-                <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}${unit}` : ""}</p>
+                <p key={i} className="text-xs text-muted-foreground">{g.sets}×{g.reps}{g.weight ? ` @ ${g.weight}kg` : ""}</p>
               ))}
+              {secondaryStr && <p className="text-xs text-muted-foreground">{secondaryStr}</p>}
             </div>
           ) : (
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{sets}×{reps}{weight ? ` @ ${weight}${unit}` : ""}</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{sets}×{reps}{weight ? ` @ ${weight}kg` : ""}{secondaryStr ? ` · ${secondaryStr}` : ""}</span>
           )}
           {prevLogs.length > 0 && (
             <button onClick={() => setShowPrev(!showPrev)} className="p-1 rounded hover:bg-secondary transition-colors">
