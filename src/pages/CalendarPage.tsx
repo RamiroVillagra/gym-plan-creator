@@ -187,34 +187,44 @@ export default function CalendarPage() {
       const [logsResult, overridesResult] = await Promise.all([
         supabase
           .from("workout_logs")
-          .select("assigned_workout_id, exercise_id, reps_done, weight_used")
+          .select("assigned_workout_id, exercise_id, set_number, reps_done, weight_used")
           .in("assigned_workout_id", visibleWorkoutIds)
           .eq("completed", true),
         supabase
           .from("assigned_workout_exercises")
-          .select("assigned_workout_id, exercise_id, reps, weight")
+          .select("assigned_workout_id, exercise_id, reps, weight, set_groups")
           .in("assigned_workout_id", visibleWorkoutIds),
       ]);
 
       const logs = logsResult.data ?? [];
       if (!logs.length) return new Set<string>();
 
+      // Plan de un ejercicio: reps/peso simples + set_groups (series divididas)
+      type PlanEntry = { reps: number | null; weight: number | null; set_groups?: any };
+      // Expande set_groups en objetivos por serie: índice 0 = serie 1, etc.
+      const expandGroups = (sg: any): { reps: number | null; weight: number | null }[] => {
+        if (!Array.isArray(sg)) return [];
+        const out: { reps: number | null; weight: number | null }[] = [];
+        for (const g of sg) for (let i = 0; i < (g?.sets ?? 0); i++) out.push({ reps: g?.reps ?? null, weight: g?.weight ?? null });
+        return out;
+      };
+
       // Mapa de overrides del coach (si editó este workout manualmente)
-      const overrideMap = new Map<string, { reps: number | null; weight: number | null }>();
-      for (const o of (overridesResult.data ?? [])) {
-        overrideMap.set(`${o.assigned_workout_id}__${o.exercise_id}`, { reps: o.reps, weight: o.weight });
+      const overrideMap = new Map<string, PlanEntry>();
+      for (const o of (overridesResult.data ?? []) as any[]) {
+        overrideMap.set(`${o.assigned_workout_id}__${o.exercise_id}`, { reps: o.reps, weight: o.weight, set_groups: o.set_groups });
       }
 
       // Paso 2: plan base (routine_exercises) para workouts sin override del coach
       const routineIds = [...new Set(
         (workouts ?? []).filter((w: any) => w.routine_id).map((w: any) => w.routine_id)
       )];
-      const baseMap = new Map<string, { reps: number | null; weight: number | null }>();
+      const baseMap = new Map<string, PlanEntry>();
 
       if (routineIds.length) {
         const { data: baseExercises } = await supabase
           .from("routine_exercises")
-          .select("routine_id, exercise_id, reps, weight, day_number")
+          .select("routine_id, exercise_id, reps, weight, set_groups, day_number")
           .in("routine_id", routineIds);
 
         for (const w of workouts ?? [] as any[]) {
@@ -225,7 +235,7 @@ export default function CalendarPage() {
             const key = `${w.id}__${re.exercise_id}`;
             // Solo usar base si el coach no creó un override para este ejercicio
             if (!overrideMap.has(key)) {
-              baseMap.set(key, { reps: re.reps, weight: re.weight });
+              baseMap.set(key, { reps: re.reps, weight: re.weight, set_groups: (re as any).set_groups });
             }
           }
         }
@@ -238,8 +248,21 @@ export default function CalendarPage() {
         const plan = overrideMap.get(key) ?? baseMap.get(key);
 
         if (!plan) {
-          // Sin plan (workout libre o set_groups complejos) → asumir modificado
+          // Sin plan que comparar (entrenamiento libre / ejercicio fuera del plan) → asumir modificado
           modifiedIds.add(log.assigned_workout_id);
+          continue;
+        }
+
+        // Series divididas: comparar cada serie registrada contra su grupo planificado
+        if (Array.isArray(plan.set_groups) && plan.set_groups.length) {
+          const targets = expandGroups(plan.set_groups);
+          const t = targets[(log.set_number ?? 1) - 1];
+          if (!t) {
+            // Registró más series de las planificadas → modificado
+            modifiedIds.add(log.assigned_workout_id);
+          } else if ((log.reps_done ?? 0) !== (t.reps ?? 0) || (log.weight_used ?? 0) !== (t.weight ?? 0)) {
+            modifiedIds.add(log.assigned_workout_id);
+          }
           continue;
         }
 
