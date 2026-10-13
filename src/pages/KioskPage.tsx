@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dumbbell, ArrowLeft, CheckCircle2, Circle, Search, UserPlus, X, Settings, Plus, Trash2, Play, RefreshCw, MessageSquare } from "lucide-react";
-import { format, addWeeks, addDays } from "date-fns";
+import { format, addWeeks, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -868,10 +868,18 @@ export default function KioskPage() {
                 if (!pendingClientAllWorkouts.length) {
                   return <p className="text-xs text-muted-foreground text-center py-3">No hay entrenamientos planificados.</p>;
                 }
-                // Separar por sección
+                // Separar por sección (semana actual destacada para no agarrar la semana pasada)
+                const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+                const weekEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+                const asc = (a: any, b: any) => a.workout_date.localeCompare(b.workout_date);
+                const desc = (a: any, b: any) => b.workout_date.localeCompare(a.workout_date);
                 const todayWorkout = pendingClientAllWorkouts.filter(w => w.workout_date === today);
-                const upcoming = pendingClientAllWorkouts.filter(w => w.workout_date > today);
-                const past = pendingClientAllWorkouts.filter(w => w.workout_date < today);
+                // Esta semana (sin hoy): días ya pasados y próximos de la semana en curso
+                const thisWeek = pendingClientAllWorkouts
+                  .filter(w => w.workout_date !== today && w.workout_date >= weekStart && w.workout_date <= weekEnd)
+                  .sort(asc);
+                const upcoming = pendingClientAllWorkouts.filter(w => w.workout_date > weekEnd).sort(asc);
+                const past = pendingClientAllWorkouts.filter(w => w.workout_date < weekStart).sort(desc);
                 const renderItem = (w: any, isToday = false) => {
                   const dateObj = new Date(w.workout_date + "T12:00:00");
                   const isPast = w.workout_date < today;
@@ -941,10 +949,16 @@ export default function KioskPage() {
                         {todayWorkout.map(w => renderItem(w, true))}
                       </>
                     )}
+                    {thisWeek.length > 0 && (
+                      <>
+                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1 pt-2">Esta semana</p>
+                        {thisWeek.map(w => renderItem(w))}
+                      </>
+                    )}
                     {upcoming.length > 0 && (
                       <>
-                        <p className="text-[10px] font-bold text-primary uppercase tracking-wider px-1 pb-1 pt-2">Próximos</p>
-                        {[...upcoming].map(w => renderItem(w))}
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 pb-1 pt-2">Próximas semanas</p>
+                        {upcoming.map(w => renderItem(w))}
                       </>
                     )}
                     {past.length > 0 && (
