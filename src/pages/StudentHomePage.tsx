@@ -640,9 +640,9 @@ const ExerciseCard = forwardRef(function ExerciseCard({
 
   // ── Vista AERÓBICA (misma tarjeta que Fuerza, con datos aeróbicos) ──
   if (workoutType === "aerobic") {
-    // La duración es un solo valor en su unidad (seg o m)
-    const aUnit = distanceM != null ? "m" : "seg";
-    const planVal = distanceM ?? duration ?? null;
+    // Tiempo (seg) y Metros (m) son campos independientes: pueden ir los dos
+    const hasTiempo = duration != null;
+    const hasMetros = distanceM != null;
     // Formatea una pausa en seg a algo legible (ej. 180 → "3 min", 90 → "1 min 30s")
     const fmtDur = (s: number) =>
       s >= 60 ? (s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60}s`) : `${s} seg`;
@@ -675,10 +675,16 @@ const ExerciseCard = forwardRef(function ExerciseCard({
             {nReps != null && <> de {nReps} {nReps === 1 ? "repetición" : "repeticiones"}</>}
           </p>
           <ul className="space-y-1.5 text-sm text-muted-foreground">
-            {planVal != null && (
+            {hasTiempo && (
               <li className="flex gap-2">
-                <span className="text-sky-500 font-bold">{aUnit === "m" ? "📏" : "⏱"}</span>
-                <span>Cada repetición: <span className="text-foreground font-semibold">{aUnit === "m" ? `${planVal} metros` : `${planVal} seg`}</span></span>
+                <span className="text-sky-500 font-bold">⏱</span>
+                <span>Tiempo por repetición: <span className="text-foreground font-semibold">{duration} seg</span></span>
+              </li>
+            )}
+            {hasMetros && (
+              <li className="flex gap-2">
+                <span className="text-sky-500 font-bold">📏</span>
+                <span>Metros por repetición: <span className="text-foreground font-semibold">{distanceM} m</span></span>
               </li>
             )}
             {micro ? (
@@ -703,30 +709,41 @@ const ExerciseCard = forwardRef(function ExerciseCard({
         <div className="space-y-2">
           {aeroSets.map((s, i) => {
             const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
-            const val = aUnit === "m" ? s.distance : s.duration;
-            const setVal = (v: string) => {
-              const n = [...aeroSets];
-              if (aUnit === "m") n[i].distance = v; else n[i].duration = v;
-              setAeroSets(n);
-            };
+            const setDur = (v: string) => { const n = [...aeroSets]; n[i].duration = v; setAeroSets(n); };
+            const setDist = (v: string) => { const n = [...aeroSets]; n[i].distance = v; setAeroSets(n); };
             return (
               <div key={i} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isLogged ? "bg-sky-500/10" : "bg-secondary/40"}`}>
                 <span className="text-sm font-medium text-foreground w-16">Serie {i + 1}</span>
-                <div className="flex items-center gap-1.5 flex-1">
+                <div className="flex items-center gap-1.5 flex-1 flex-wrap">
                   <span className="text-[11px] text-muted-foreground">hice</span>
-                  <Input
-                    type="number" inputMode="numeric" placeholder={String(planVal ?? "")}
-                    className="w-20 h-10 text-base text-center"
-                    value={val}
-                    onChange={e => setVal(e.target.value)}
-                  />
-                  <span className="text-xs text-muted-foreground">{aUnit === "m" ? "m" : "seg"}</span>
+                  {hasTiempo && (
+                    <>
+                      <Input
+                        type="number" inputMode="numeric" placeholder={String(duration ?? "")}
+                        className="w-16 h-10 text-base text-center"
+                        value={s.duration}
+                        onChange={e => setDur(e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">seg</span>
+                    </>
+                  )}
+                  {hasMetros && (
+                    <>
+                      <Input
+                        type="number" inputMode="numeric" placeholder={String(distanceM ?? "")}
+                        className="w-16 h-10 text-base text-center"
+                        value={s.distance}
+                        onChange={e => setDist(e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">m</span>
+                    </>
+                  )}
                 </div>
                 <button
                   onClick={() => onLogSet({
                     exercise_id: exerciseId, set_number: i + 1, reps_done: 0, weight_used: 0,
-                    duration_done: aUnit === "seg" ? (s.duration ? parseFloat(s.duration) : (duration ?? 0)) : 0,
-                    distance_done: aUnit === "m" ? (s.distance ? parseFloat(s.distance) : (distanceM ?? 0)) : 0,
+                    duration_done: hasTiempo ? (s.duration ? parseFloat(s.duration) : (duration ?? 0)) : 0,
+                    distance_done: hasMetros ? (s.distance ? parseFloat(s.distance) : (distanceM ?? 0)) : 0,
                   })}
                   title={isLogged ? "Serie registrada" : "Marcar serie como hecha"}
                 >
