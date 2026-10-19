@@ -704,60 +704,6 @@ const ExerciseCard = forwardRef(function ExerciseCard({
           </ul>
         </div>
 
-        {/* Registro por serie */}
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-          Marcá cada serie cuando la termines
-        </p>
-        <div className="space-y-2">
-          {aeroSets.map((s, i) => {
-            const isLogged = existingLogs.some((l: any) => l.set_number === i + 1 && l.completed);
-            const setDur = (v: string) => { const n = [...aeroSets]; n[i].duration = v; setAeroSets(n); };
-            const setDist = (v: string) => { const n = [...aeroSets]; n[i].distance = v; setAeroSets(n); };
-            return (
-              <div key={i} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isLogged ? "bg-sky-500/10" : "bg-secondary/40"}`}>
-                <span className="text-sm font-medium text-foreground w-16">Serie {i + 1}</span>
-                <div className="flex items-center gap-1.5 flex-1 flex-wrap">
-                  <span className="text-[11px] text-muted-foreground">hice</span>
-                  {hasTiempo && (
-                    <>
-                      <Input
-                        type="number" inputMode="numeric" placeholder={String(duration ?? "")}
-                        className="w-16 h-10 text-base text-center"
-                        value={s.duration}
-                        onChange={e => setDur(e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground">seg</span>
-                    </>
-                  )}
-                  {hasMetros && (
-                    <>
-                      <Input
-                        type="number" inputMode="numeric" placeholder={String(distanceM ?? "")}
-                        className="w-16 h-10 text-base text-center"
-                        value={s.distance}
-                        onChange={e => setDist(e.target.value)}
-                      />
-                      <span className="text-xs text-muted-foreground">m</span>
-                    </>
-                  )}
-                </div>
-                <button
-                  onClick={() => onLogSet({
-                    exercise_id: exerciseId, set_number: i + 1, reps_done: 0, weight_used: 0,
-                    duration_done: hasTiempo ? (s.duration ? parseFloat(s.duration) : (duration ?? 0)) : 0,
-                    distance_done: hasMetros ? (s.distance ? parseFloat(s.distance) : (distanceM ?? 0)) : 0,
-                  })}
-                  title={isLogged ? "Serie registrada" : "Marcar serie como hecha"}
-                >
-                  {isLogged
-                    ? <CheckCircle2 className="h-8 w-8 text-sky-500" />
-                    : <Circle className="h-8 w-8 text-muted-foreground hover:text-sky-500" />
-                  }
-                </button>
-              </div>
-            );
-          })}
-        </div>
       </div>
     );
   }
