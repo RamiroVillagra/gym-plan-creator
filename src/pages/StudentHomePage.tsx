@@ -74,6 +74,41 @@ export default function StudentHomePage() {
     },
   });
 
+  // Qué entrenamientos son aeróbicos (para pintarlos de otro color, como el coach).
+  // Resuelve el tipo desde los overrides y, si no hay, desde la rutina base.
+  const { data: aerobicWorkoutIds } = useQuery({
+    queryKey: ["student-aerobic", clientId, start, end],
+    enabled: !!workouts?.length,
+    queryFn: async () => {
+      const s = new Set<string>();
+      const ids = workoutIds;
+      if (!ids.length) return s;
+      const { data: ov } = await supabase
+        .from("assigned_workout_exercises")
+        .select("assigned_workout_id, workout_type")
+        .in("assigned_workout_id", ids);
+      const withOv = new Set<string>();
+      for (const e of (ov ?? []) as any[]) {
+        withOv.add(e.assigned_workout_id);
+        if (e.workout_type === "aerobic") s.add(e.assigned_workout_id);
+      }
+      const missing = (workouts ?? []).filter((w: any) => !withOv.has(w.id) && w.routine_id);
+      const routineIds = [...new Set(missing.map((w: any) => w.routine_id))];
+      if (routineIds.length) {
+        const { data: base } = await supabase
+          .from("routine_exercises")
+          .select("routine_id, day_number, workout_type")
+          .in("routine_id", routineIds as string[]);
+        for (const w of missing as any[]) {
+          const isAero = (base ?? []).some((b: any) =>
+            b.routine_id === w.routine_id && (b.day_number ?? 1) === (w.day_number ?? 1) && b.workout_type === "aerobic");
+          if (isAero) s.add(w.id);
+        }
+      }
+      return s;
+    },
+  });
+
   // Back button del navegador
   useEffect(() => {
     if (selectedWorkout) {
@@ -175,6 +210,7 @@ export default function StudentHomePage() {
             const hasWorkout = dayWorkouts.length > 0;
             const isCompleted = dayWorkouts.some((w: any) => completedWorkoutIds?.has(w.id));
             const isPast = dateStr < today;
+            const isAerobic = hasWorkout && dayWorkouts[0] && !!aerobicWorkoutIds?.has(dayWorkouts[0].id);
 
             return (
               <div
@@ -186,9 +222,9 @@ export default function StudentHomePage() {
                   hasWorkout ? "cursor-pointer" : "cursor-default"
                 } ${
                   isToday
-                    ? "border-2 border-primary bg-primary/5"
+                    ? (isAerobic ? "border-2 border-sky-500 bg-sky-500/5" : "border-2 border-primary bg-primary/5")
                     : hasWorkout
-                    ? "border border-primary/30 bg-card hover:bg-primary/5"
+                    ? (isAerobic ? "border border-sky-500/40 bg-card hover:bg-sky-500/5" : "border border-primary/30 bg-card hover:bg-primary/5")
                     : "border border-border bg-card/50"
                 } ${!isCurrentMonth ? "opacity-25" : ""}`}
               >
@@ -206,7 +242,7 @@ export default function StudentHomePage() {
                 {hasWorkout && dayWorkouts[0] && (
                   <div className="min-w-0 flex-1">
                     <p className={`text-[9px] font-semibold leading-tight truncate ${
-                      isCompleted ? "text-primary" : isToday ? "text-primary" : isPast ? "text-muted-foreground" : "text-foreground"
+                      isPast ? "text-muted-foreground" : isAerobic ? "text-sky-500" : (isCompleted || isToday) ? "text-primary" : "text-foreground"
                     }`}>
                       {dayWorkouts[0].routines?.name ?? "Sesión"}
                     </p>
@@ -234,21 +270,24 @@ export default function StudentHomePage() {
         return (
           <div className="mt-6">
             <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Hoy</p>
-            {todayWorkouts.map((w: any) => (
+            {todayWorkouts.map((w: any) => {
+              const aero = !!aerobicWorkoutIds?.has(w.id);
+              return (
               <button
                 key={w.id}
                 onClick={() => setSelectedWorkout(w)}
-                className="w-full flex items-center justify-between bg-primary text-primary-foreground rounded-xl px-4 py-3.5 font-semibold hover:bg-primary/90 transition-colors"
+                className={`w-full flex items-center justify-between rounded-xl px-4 py-3.5 font-semibold transition-colors ${aero ? "bg-sky-500 text-white hover:bg-sky-500/90" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}
               >
                 <div className="text-left">
-                  <p className="font-bold">{w.routines?.name ?? "Sesión"}</p>
+                  <p className="font-bold">{w.routines?.name ?? "Sesión"}{aero ? " · Aeróbico" : ""}</p>
                   {(w.routines?.total_days ?? 1) > 1 && (
                     <p className="text-xs opacity-80">Día {w.day_number ?? 1}</p>
                   )}
                 </div>
                 <ChevronRight className="h-5 w-5" />
               </button>
-            ))}
+              );
+            })}
           </div>
         );
       })()}
