@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { format, addDays, startOfWeek, endOfWeek, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
-
-import { es } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { UndoEntry } from "@/pages/CalendarPage";
+
+// Formatea segundos a "1min 30s" / "2min" / "45s" (resumen aeróbico)
+const fmtSeg = (v: number) => v >= 60 ? (v % 60 === 0 ? `${v / 60}min` : `${Math.floor(v / 60)}min ${v % 60}s`) : `${v}s`;
 
 interface RoutineDetailViewProps {
   routineId?: string;
@@ -57,6 +58,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   // Campos aeróbicos del editor
   const [editDuration, setEditDuration] = useState("");   // Tiempo (seg)
   const [editMetros, setEditMetros] = useState("");        // Metros (m) — aeróbico
+  const [editTiempoMin, setEditTiempoMin] = useState("");  // Tiempo: parte de minutos (editDuration = segundos)
+
 
   const [editDistanceM, setEditDistanceM] = useState("");  // Distancia (m)
   const [editMicro, setEditMicro] = useState("");          // Micro pausa (seg)
@@ -1044,7 +1047,9 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 <Input type="number" className="w-12 h-7 text-xs" value={editReps} onChange={e => setEditReps(e.target.value)} placeholder="0" />
                                 <span className="text-[10px] text-muted-foreground">reps</span>
                                 <span className="text-[10px] text-muted-foreground ml-1">tiempo</span>
-                                <Input type="number" className="w-14 h-7 text-xs" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="0" />
+                                <Input type="number" className="w-12 h-7 text-xs" value={editTiempoMin} onChange={e => setEditTiempoMin(e.target.value)} placeholder="0" />
+                                <span className="text-[10px] text-muted-foreground">min</span>
+                                <Input type="number" className="w-12 h-7 text-xs" value={editDuration} onChange={e => setEditDuration(e.target.value)} placeholder="0" />
                                 <span className="text-[10px] text-muted-foreground">seg</span>
                                 <span className="text-[10px] text-muted-foreground ml-1">metros</span>
                                 <Input type="number" className="w-14 h-7 text-xs" value={editMetros} onChange={e => setEditMetros(e.target.value)} placeholder="0" />
@@ -1113,7 +1118,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 block: editBlock,
                                 ...(isAerobic ? { aerobic: {
                                   // La duración es UN valor en la unidad elegida (seg o m)
-                                  duration_seconds: editDuration ? parseFloat(editDuration) : null,
+                                  duration_seconds: (editTiempoMin || editDuration) ? ((parseInt(editTiempoMin) || 0) * 60 + (parseInt(editDuration) || 0)) : null,
                                   distance_meters: editMetros ? parseFloat(editMetros) : null,
                                   micro_pause: editMicro ? parseFloat(editMicro) : null,
                                   macro_pause: editMacro ? parseFloat(editMacro) : null,
@@ -1162,7 +1167,8 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 setEditMacro(re.macro_pause != null ? String(re.macro_pause) : "");
                                 // Aeróbico: la duración es un solo valor + unidad (seg o m)
                                 if (re.workout_type === "aerobic") {
-                                  setEditDuration(re.duration_seconds != null ? String(re.duration_seconds) : "");
+                                  setEditTiempoMin(re.duration_seconds != null ? String(Math.floor(re.duration_seconds / 60)) : "");
+                                  setEditDuration(re.duration_seconds != null ? String(re.duration_seconds % 60) : "");
                                   setEditMetros(re.distance_meters != null ? String(re.distance_meters) : "");
                                 }
                               }}
@@ -1170,7 +1176,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                               <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
                               {re.workout_type === "aerobic" ? (
                                 <p className="text-[10px] text-muted-foreground">
-                                  {re.sets ? `${re.sets}×${re.reps ?? "?"}` : ""}{re.duration_seconds ? ` · ${re.duration_seconds}seg` : ""}{re.distance_meters ? ` · ${re.distance_meters}m` : ""}{re.micro_pause ? ` · micro ${re.micro_pause}s` : ""}{re.macro_pause ? ` · macro ${re.macro_pause}s` : ""}
+                                  {re.sets ? `${re.sets}×${re.reps ?? "?"}` : ""}{re.duration_seconds ? ` · ${fmtSeg(re.duration_seconds)}` : ""}{re.distance_meters ? ` · ${re.distance_meters}m` : ""}{re.micro_pause ? ` · micro ${re.micro_pause}s` : ""}{re.macro_pause ? ` · macro ${re.macro_pause}s` : ""}
                                   {!re.sets && !re.duration_seconds && !re.distance_meters ? "Aeróbico — tocá para editar" : ""}
                                 </p>
                               ) : re.set_groups?.length ? (

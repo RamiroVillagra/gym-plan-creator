@@ -678,7 +678,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
             {hasTiempo && (
               <li className="flex gap-2">
                 <span className="text-sky-500 font-bold">⏱</span>
-                <span>Tiempo por repetición: <span className="text-foreground font-semibold">{duration} seg</span></span>
+                <span>Tiempo por repetición: <span className="text-foreground font-semibold">{fmtDur(duration as number)}</span></span>
               </li>
             )}
             {hasMetros && (
