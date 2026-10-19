@@ -646,6 +646,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
     // Formatea una pausa en seg a algo legible (ej. 180 → "3 min", 90 → "1 min 30s")
     const fmtDur = (s: number) =>
       s >= 60 ? (s % 60 === 0 ? `${s / 60} min` : `${Math.floor(s / 60)} min ${s % 60}s`) : `${s} seg`;
+    const fmtMet = (m: number) =>
+      m >= 1000 ? (m % 1000 === 0 ? `${m / 1000} km` : `${Math.floor(m / 1000)} km ${m % 1000} m`) : `${m} m`;
     const nSets = sets ?? 1;
     const nReps = reps ?? null;
     return (
@@ -684,7 +686,7 @@ const ExerciseCard = forwardRef(function ExerciseCard({
             {hasMetros && (
               <li className="flex gap-2">
                 <span className="text-sky-500 font-bold">📏</span>
-                <span>Metros por repetición: <span className="text-foreground font-semibold">{distanceM} m</span></span>
+                <span>Distancia por repetición: <span className="text-foreground font-semibold">{fmtMet(distanceM as number)}</span></span>
               </li>
             )}
             {micro ? (
