@@ -449,7 +449,12 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     onError: () => toast.error("Error al guardar"),
   });
 
-  const exercises = assignedExercises?.length ? assignedExercises : (routineExercises ?? []);
+  // Filtrar los overrides por el día de este entrenamiento: al modificar un
+  // alumno se clonan los ejercicios de todos los días de la rutina, y sin este
+  // filtro se verían los dos días juntos (duplicados).
+  const dayNum = workout.day_number ?? 1;
+  const dayAssigned = (assignedExercises ?? []).filter((e: any) => (e.day_number ?? 1) === dayNum);
+  const exercises = dayAssigned.length ? dayAssigned : (routineExercises ?? []);
   const blocks = [...new Set(exercises.map((e: any) => e.block_number ?? 1))].sort((a: number, b: number) => a - b);
 
   return (

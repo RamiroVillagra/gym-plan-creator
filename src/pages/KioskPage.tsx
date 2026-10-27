@@ -653,7 +653,7 @@ export default function KioskPage() {
           todayWorkouts.map((workout: any) => {
             const dayNum = workout.day_number ?? 1;
             const workoutAssigned = (assignedExercises ?? [])
-              .filter((e: any) => e.assigned_workout_id === workout.id);
+              .filter((e: any) => e.assigned_workout_id === workout.id && (e.day_number ?? 1) === dayNum);
             const exercises = workoutAssigned.length > 0
               ? workoutAssigned
               : (workout.routines?.routine_exercises ?? []).filter((re: any) => (re.day_number ?? 1) === dayNum);
