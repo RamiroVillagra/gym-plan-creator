@@ -49,9 +49,28 @@ export default function KioskPage() {
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const [selectedClientName, setSelectedClientName] = useState("");
-  const today = format(new Date(), "yyyy-MM-dd");
+  const [today, setToday] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [manualClients, setManualClients] = useState<{ id: string; name: string }[]>(() => loadManualClients(today));
   const [recentClients, setRecentClients] = useState<{ id: string; name: string }[]>(() => loadRecentClients());
+
+  // Reset diario: en la tablet (abierta 24/7) el componente no se re-monta, así
+  // que detectamos el cambio de día y reseteamos la lista de alumnos de la sala.
+  useEffect(() => {
+    const check = () => {
+      const now = format(new Date(), "yyyy-MM-dd");
+      if (now !== today) {
+        try { localStorage.removeItem(MANUAL_CLIENTS_KEY); } catch { /* noop */ }
+        setManualClients([]);
+        setSelectedClient(null);
+        setSelectedClientName("");
+        setToday(now);
+      }
+    };
+    const id = setInterval(check, 60_000);
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVisible); };
+  }, [today]);
 
   // Manejar botón "atrás" del navegador/teléfono
   useEffect(() => {
