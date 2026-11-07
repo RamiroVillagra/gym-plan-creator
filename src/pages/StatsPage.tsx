@@ -38,6 +38,17 @@ export default function StatsPage() {
     });
   };
 
+  // ── Contador de km aeróbicos ──────────────────────────────────────────────
+  const [kmExerciseId, setKmExerciseId] = useState("");       // "" = todos los aeróbicos
+  const [kmPreset, setKmPreset] = useState("3m");             // 1m | 3m | 6m | 12m | todo
+  const [kmFrom, setKmFrom] = useState(format(subMonths(new Date(), 3), "yyyy-MM-dd"));
+  const [kmTo, setKmTo] = useState("");
+  const applyKmPreset = (key: string, months: number | null) => {
+    setKmPreset(key);
+    setKmFrom(months == null ? "" : format(subMonths(new Date(), months), "yyyy-MM-dd"));
+    setKmTo("");
+  };
+
   const { data: clients } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
@@ -70,6 +81,38 @@ export default function StatsPage() {
         .order("set_number");
       if (error) throw error;
       return data as any[];
+    },
+  });
+
+  // Ejercicios aeróbicos para el desplegable del contador de km
+  const { data: aerobicExercises } = useQuery({
+    queryKey: ["aerobic-exercises"],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("exercises").select("id, name").eq("type", "aerobic").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+  });
+
+  // Total de km aeróbicos del alumno en el período (distance_done está en metros)
+  const { data: kmMeters } = useQuery({
+    queryKey: ["km-total", selectedClient, kmExerciseId, kmFrom, kmTo],
+    enabled: !!selectedClient,
+    queryFn: async () => {
+      let q = (supabase as any)
+        .from("workout_logs")
+        .select("distance_done, exercises!inner(type), assigned_workouts!inner(workout_date, client_id)")
+        .eq("assigned_workouts.client_id", selectedClient)
+        .eq("completed", true)
+        .not("distance_done", "is", null);
+      if (kmFrom) q = q.gte("assigned_workouts.workout_date", kmFrom);
+      if (kmTo) q = q.lte("assigned_workouts.workout_date", kmTo);
+      if (kmExerciseId) q = q.eq("exercise_id", kmExerciseId);
+      else q = q.eq("exercises.type", "aerobic");
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []).reduce((s: number, r: any) => s + (r.distance_done ?? 0), 0) as number;
     },
   });
 
@@ -216,6 +259,44 @@ export default function StatsPage() {
         </div>
 
       </div>
+
+      {/* Contador de km aeróbicos (por alumno) */}
+      {selectedClient && (
+        <div className="bg-card border border-border rounded-xl p-5 mb-8">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+            <h2 className="font-heading font-semibold text-foreground flex items-center gap-2">
+              <span className="text-sky-500">📏</span> Kilómetros aeróbicos
+            </h2>
+            <select
+              value={kmExerciseId}
+              onChange={e => setKmExerciseId(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+            >
+              <option value="">Todos los aeróbicos</option>
+              {aerobicExercises?.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-1 flex-wrap mb-4">
+            {([["1m", "1 mes", 1], ["3m", "3 meses", 3], ["6m", "6 meses", 6], ["12m", "1 año", 12], ["todo", "Todo", null]] as const).map(([key, label, months]) => (
+              <button
+                key={key}
+                onClick={() => applyKmPreset(key, months)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  kmPreset === key ? "bg-sky-500 text-white" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-4xl font-bold text-sky-600 leading-none">{((kmMeters ?? 0) / 1000).toFixed(1)}<span className="text-lg font-semibold text-sky-500 ml-1">km</span></p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {kmFrom ? `Desde el ${format(parseISO(kmFrom), "d 'de' MMMM yyyy", { locale: es })}` : "Histórico completo"}
+            {kmExerciseId ? ` · ${aerobicExercises?.find(e => e.id === kmExerciseId)?.name ?? ""}` : " · todos los ejercicios aeróbicos"}
+            {" · "}{((kmMeters ?? 0)).toLocaleString("es-AR")} m
+          </p>
+        </div>
+      )}
 
       {/* Contenido */}
       {!selectedClient || !hasExercises ? (
