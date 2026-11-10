@@ -754,6 +754,10 @@ const ExerciseCard = forwardRef(function ExerciseCard({
 
   // Valor secundario del plan de fuerza (RIR u otra unidad: cm/m/seg)
   const secondaryStr = distance != null ? (unit === "rir" ? `RIR ${distance}` : `${distance} ${unit}`) : "";
+  // Secundario (cm/m/seg/rir): es un dato FIJO del plan, no se modifica. Lo que
+  // el alumno edita es el peso (kg). Sin secundario, se muestra el peso planificado.
+  const hasSecondary = distance != null && unit !== "kg";
+
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-3">
@@ -806,8 +810,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
       <div className="flex items-center gap-2 mb-1">
         <span className="text-[10px] text-muted-foreground w-16" />
         <span className="text-[10px] text-muted-foreground w-16 text-center">Reps</span>
-        <span className="text-[10px] text-muted-foreground w-20 text-center">Planif.</span>
-        <span className="text-[10px] text-muted-foreground w-20 text-center">Realiz.</span>
+        <span className="text-[10px] text-muted-foreground w-20 text-center">{hasSecondary ? unit : "Planif."}</span>
+        <span className="text-[10px] text-muted-foreground w-24 text-center">Peso (kg)</span>
         <span className="w-7" />
       </div>
 
@@ -824,17 +828,24 @@ const ExerciseCard = forwardRef(function ExerciseCard({
                 value={s.reps}
                 onChange={e => { const n = [...localSets]; n[i].reps = e.target.value; setLocalSets(n); }}
               />
+              {/* Columna fija: el cm (u otra medida) del plan — NO se modifica */}
               <span className="text-xs text-muted-foreground w-20 text-center">
-                {allSets[i]?.targetWeight ? `${allSets[i].targetWeight}${unit}` : "—"}
+                {hasSecondary
+                  ? `${distance}${unit}`
+                  : (allSets[i]?.targetWeight != null ? `${allSets[i].targetWeight}kg` : "—")}
               </span>
-              <Input
-                type="number"
-                inputMode="numeric"
-                placeholder={unit}
-                className="w-20 h-10 text-base"
-                value={s.weightDone}
-                onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
-              />
+              {/* Editable: el peso en kg (lo que importa) */}
+              <div className="flex items-center gap-1 w-24">
+                <span className="text-[11px] font-semibold text-muted-foreground shrink-0">kg</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="kg"
+                  className="flex-1 h-10 text-base text-center"
+                  value={s.weightDone}
+                  onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
+                />
+              </div>
               <button onClick={() => {
                 // #1: isNaN para que 0 sea un valor registrable
                 const pReps   = parseInt(s.reps);
