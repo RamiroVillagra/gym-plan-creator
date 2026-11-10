@@ -164,17 +164,17 @@ export default function StatsPage() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center justify-center gap-3 mb-8">
         <TrendingUp className="h-7 w-7 text-primary" />
         <h1 className="font-heading text-2xl font-bold">Estadísticas</h1>
       </div>
 
       {/* Nombre del alumno */}
-      <div className="mb-6 max-w-md">
+      <div className="mb-6 max-w-md mx-auto">
 
         {/* Buscador cliente */}
         <div>
-          <label className="text-sm text-muted-foreground block mb-2">Cliente</label>
+          <label className="text-sm text-muted-foreground block mb-2 text-center">Cliente</label>
           {selectedClient ? (
             <div className="flex items-center justify-between h-10 px-3 rounded-lg bg-primary/10 border border-primary/30">
               <span className="text-sm font-medium text-primary">{selectedClientName}</span>
@@ -214,7 +214,7 @@ export default function StatsPage() {
 
       {/* Elegir tipo de entrenamiento */}
       {selectedClient && (
-        <div className="flex gap-1 mb-6 bg-secondary/60 p-1 rounded-lg w-fit">
+        <div className="flex gap-1 mb-6 bg-secondary/60 p-1 rounded-lg w-fit mx-auto">
           <button
             onClick={() => setStatMode("fuerza")}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${statMode === "fuerza" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
@@ -232,7 +232,7 @@ export default function StatsPage() {
 
       {/* Buscador ejercicio (solo Fuerza) */}
       {selectedClient && statMode === "fuerza" && (
-      <div className="mb-8 max-w-md">
+      <div className="mb-8 max-w-md mx-auto">
         {/* Buscador ejercicio (múltiple: combina ejercicios equivalentes) */}
         <div>
           <label className="text-sm text-muted-foreground block mb-2">
