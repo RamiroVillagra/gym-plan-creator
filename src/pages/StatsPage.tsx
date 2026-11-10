@@ -10,7 +10,9 @@ import {
 } from "recharts";
 
 export default function StatsPage() {
+  const [statMode, setStatMode] = useState<"fuerza" | "aerobico">("fuerza"); // tipo de entrenamiento
   const [selectedClient, setSelectedClient] = useState("");
+
   const [selectedClientName, setSelectedClientName] = useState("");
   const [clientSearch, setClientSearch] = useState("");
 
@@ -167,8 +169,8 @@ export default function StatsPage() {
         <h1 className="font-heading text-2xl font-bold">Estadísticas</h1>
       </div>
 
-      {/* Selectores */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+      {/* Nombre del alumno */}
+      <div className="mb-6 max-w-md">
 
         {/* Buscador cliente */}
         <div>
@@ -208,7 +210,29 @@ export default function StatsPage() {
             </div>
           )}
         </div>
+      </div>
 
+      {/* Elegir tipo de entrenamiento */}
+      {selectedClient && (
+        <div className="flex gap-1 mb-6 bg-secondary/60 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setStatMode("fuerza")}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${statMode === "fuerza" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Fuerza
+          </button>
+          <button
+            onClick={() => setStatMode("aerobico")}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${statMode === "aerobico" ? "bg-card text-sky-600 shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Aeróbico
+          </button>
+        </div>
+      )}
+
+      {/* Buscador ejercicio (solo Fuerza) */}
+      {selectedClient && statMode === "fuerza" && (
+      <div className="mb-8 max-w-md">
         {/* Buscador ejercicio (múltiple: combina ejercicios equivalentes) */}
         <div>
           <label className="text-sm text-muted-foreground block mb-2">
@@ -257,11 +281,11 @@ export default function StatsPage() {
             </p>
           )}
         </div>
-
       </div>
+      )}
 
-      {/* Contador de km aeróbicos (por alumno) */}
-      {selectedClient && (
+      {/* Contador de km aeróbicos (solo Aeróbico) */}
+      {selectedClient && statMode === "aerobico" && (
         <div className="bg-card border border-border rounded-xl p-5 mb-8">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
             <h2 className="font-heading font-semibold text-foreground flex items-center gap-2">
@@ -298,8 +322,8 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Contenido */}
-      {!selectedClient || !hasExercises ? (
+      {/* Contenido del gráfico (solo Fuerza) */}
+      {statMode === "fuerza" && (!selectedClient || !hasExercises ? (
         <div className="text-center py-20 text-muted-foreground">
           <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-20" />
           <p>Elegí un cliente y uno o más ejercicios para ver la progresión.</p>
@@ -460,7 +484,7 @@ export default function StatsPage() {
           </>
           )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
