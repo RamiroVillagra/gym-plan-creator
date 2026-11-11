@@ -325,7 +325,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("assigned_workout_exercises")
-        .select("*, exercises(name, muscle_group, video_url)")
+        .select("*, exercises(name, muscle_group, video_url, type)")
         .eq("assigned_workout_id", workout.id)
         .order("block_number")
         .order("order_index");
@@ -340,7 +340,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("routine_exercises")
-        .select("*, exercises(name, muscle_group, video_url)")
+        .select("*, exercises(name, muscle_group, video_url, type)")
         .eq("routine_id", workout.routine_id)
         .eq("day_number", workout.day_number ?? 1)
         .order("block_number")
@@ -518,7 +518,7 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
                 distance={re.distance ?? null}
                 setGroups={re.set_groups}
                 coachNotes={re.notes ?? null}
-                workoutType={re.workout_type ?? "strength"}
+                workoutType={(re.exercises?.type as string) ?? re.workout_type ?? "strength"}
                 duration={re.duration_seconds ?? null}
                 distanceM={re.distance_meters ?? null}
                 micro={re.micro_pause ?? null}
