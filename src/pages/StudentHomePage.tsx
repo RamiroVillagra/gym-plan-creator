@@ -456,11 +456,6 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
   const dayAssigned = (assignedExercises ?? []).filter((e: any) => (e.day_number ?? 1) === dayNum);
   const exercises = dayAssigned.length ? dayAssigned : (routineExercises ?? []);
   const blocks = [...new Set(exercises.map((e: any) => e.block_number ?? 1))].sort((a: number, b: number) => a - b);
-  // Día mixto: tiene ejercicios de fuerza Y aeróbicos → etiquetamos los bloques por tipo
-  const dayHasAerobic = exercises.some((e: any) => e.workout_type === "aerobic");
-  const dayHasStrength = exercises.some((e: any) => (e.workout_type ?? "strength") !== "aerobic");
-  const isMixedDay = dayHasAerobic && dayHasStrength;
-
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
@@ -502,14 +497,10 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
       {/* Ejercicios */}
       {blocks.map((blockNum: number) => {
         const blockExercises = exercises.filter((e: any) => (e.block_number ?? 1) === blockNum);
-        const blockAllAerobic = blockExercises.length > 0 && blockExercises.every((e: any) => e.workout_type === "aerobic");
         return (
           <div key={blockNum} className="mb-4">
-            {(blocks.length > 1 || isMixedDay) && (
-              <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${blockAllAerobic ? "text-sky-500" : "text-primary"}`}>
-                Bloque {blockNum}
-                {blockAllAerobic ? " · Aeróbico" : (isMixedDay ? " · Fuerza" : "")}
-              </p>
+            {blocks.length > 1 && (
+              <p className="text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque {blockNum}</p>
             )}
             {blockExercises.map((re: any) => (
               <ExerciseCard
