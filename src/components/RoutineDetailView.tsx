@@ -878,19 +878,23 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
       <div className="flex items-center justify-between mb-2 gap-2">
         <p className="text-sm font-semibold text-foreground truncate">{routineName}</p>
         {editable && (
-          <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
-            {([["strength", "Fuerza"], ["aerobic", "Aeróbico"]] as const).map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => { setDayTypeSel(val); setDayTypeMutation.mutate(val); }}
-                className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                  dayType === val ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wide">Agregar</span>
+            <div className="flex rounded-lg border border-border overflow-hidden">
+              {([["strength", "Fuerza"], ["aerobic", "Aeróbico"]] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  title={`Agregar ejercicios de ${label.toLowerCase()} a este día`}
+                  onClick={() => setDayTypeSel(val)}
+                  className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                    dayType === val ? (val === "aerobic" ? "bg-sky-500 text-white" : "bg-primary text-primary-foreground") : "bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1043,7 +1047,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                         {isEditing ? (
                           <div className="flex flex-col gap-1.5 flex-1">
                             <p className="text-xs font-medium text-foreground">{re.exercises?.name}</p>
-                            {isAerobic ? (
+                            {re.workout_type === "aerobic" ? (
                               /* Aeróbico: Series × Reps · Tiempo (seg) · Metros (m) · Micro/Macro pausa */
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <Input type="number" className="w-12 h-7 text-xs" value={editSets} onChange={e => setEditSets(e.target.value)} placeholder="0" />
@@ -1123,7 +1127,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
                                 distance: editUnit !== "kg" && editDistance ? parseFloat(editDistance) : null,
                                 notes: editNotes || null,
                                 block: editBlock,
-                                ...(isAerobic ? { aerobic: {
+                                ...(re.workout_type === "aerobic" ? { aerobic: {
                                   // La duración es UN valor en la unidad elegida (seg o m)
                                   duration_seconds: (editTiempoMin || editDuration) ? ((parseInt(editTiempoMin) || 0) * 60 + (parseInt(editDuration) || 0)) : null,
                                   distance_meters: (editKm || editMetros) ? ((parseInt(editKm) || 0) * 1000 + (parseInt(editMetros) || 0)) : null,
