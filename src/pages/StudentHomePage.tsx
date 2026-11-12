@@ -406,6 +406,19 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
     },
   });
 
+  // Desmarcar una serie registrada por error (borra ese registro)
+  const unlogSet = useMutation({
+    mutationFn: async (params: { exercise_id: string; set_number: number }) => {
+      const { error } = await supabase.from("workout_logs").delete()
+        .eq("assigned_workout_id", workout.id)
+        .eq("exercise_id", params.exercise_id)
+        .eq("set_number", params.set_number);
+      if (error) throw error;
+    },
+    onSuccess: () => { refetchLogs(); toast.info("Serie desmarcada"); },
+    onError: () => toast.error("No se pudo desmarcar"),
+  });
+
   const saveAllSets = useMutation({
     mutationFn: async () => {
       // Detectar modificaciones para el toast
@@ -527,6 +540,8 @@ function WorkoutDetail({ workout, clientId, onBack, onSaved }: {
                 existingLogs={existingLogs?.filter((l: any) => l.exercise_id === re.exercise_id) ?? []}
                 prevLogs={(prevLogs ?? []).filter((l: any) => l.exercise_id === re.exercise_id)}
                 onLogSet={(params) => logSet.mutate(params)}
+                onUnlogSet={(params) => unlogSet.mutate(params)}
+
               />
             ))}
           </div>
@@ -596,7 +611,7 @@ function WorkoutNotes({ workoutId, initialNotes, onSave }: { workoutId: string; 
 }
 
 const ExerciseCard = forwardRef(function ExerciseCard({
-  exercise, sets, reps, weight, unit = "kg", distance = null, setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet,
+  exercise, sets, reps, weight, unit = "kg", distance = null, setGroups, coachNotes, exerciseId, existingLogs, prevLogs, onLogSet, onUnlogSet,
   workoutType = "strength", duration, distanceM, micro, macro,
 }: {
   exercise: any; sets: number; reps: number; weight: number | null; unit?: string; distance?: number | null;
@@ -604,6 +619,8 @@ const ExerciseCard = forwardRef(function ExerciseCard({
   coachNotes?: string | null;
   exerciseId: string; existingLogs: any[]; prevLogs: any[];
   onLogSet: (params: { exercise_id: string; set_number: number; reps_done: number; weight_used: number; duration_done?: number; distance_done?: number }) => void;
+  onUnlogSet: (params: { exercise_id: string; set_number: number }) => void;
+
   // Aeróbico (no afecta a Fuerza)
   workoutType?: string; duration?: number | null; distanceM?: number | null; micro?: number | null; macro?: number | null;
 }, ref: any) {
@@ -846,17 +863,25 @@ const ExerciseCard = forwardRef(function ExerciseCard({
                   onChange={e => { const n = [...localSets]; n[i].weightDone = e.target.value; setLocalSets(n); }}
                 />
               </div>
-              <button onClick={() => {
-                // #1: isNaN para que 0 sea un valor registrable
-                const pReps   = parseInt(s.reps);
-                const pWeight = parseFloat(s.weightDone);
-                onLogSet({
-                  exercise_id: exerciseId,
-                  set_number:  i + 1,
-                  reps_done:   isNaN(pReps)   ? 0 : pReps,
-                  weight_used: isNaN(pWeight) ? 0 : pWeight,
-                });
-              }}>
+              <button
+                title={isLogged ? "Tocá para desmarcar" : "Marcar serie como hecha"}
+                onClick={() => {
+                  // Si ya está marcada, destildar (borra el registro de esa serie)
+                  if (isLogged) {
+                    onUnlogSet({ exercise_id: exerciseId, set_number: i + 1 });
+                    return;
+                  }
+                  // #1: isNaN para que 0 sea un valor registrable
+                  const pReps   = parseInt(s.reps);
+                  const pWeight = parseFloat(s.weightDone);
+                  onLogSet({
+                    exercise_id: exerciseId,
+                    set_number:  i + 1,
+                    reps_done:   isNaN(pReps)   ? 0 : pReps,
+                    weight_used: isNaN(pWeight) ? 0 : pWeight,
+                  });
+                }}
+              >
                 {isLogged
                   ? <CheckCircle2 className="h-7 w-7 text-primary" />
                   : <Circle className="h-7 w-7 text-muted-foreground hover:text-primary" />
