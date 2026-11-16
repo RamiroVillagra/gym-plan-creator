@@ -848,6 +848,28 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const dayExercises = routineExercises?.filter((re: any) => re.day_number === selectedDay) ?? [];
   const blocks = [...new Set(dayExercises.map((re: any) => re.block_number))].sort((a, b) => a - b);
 
+  // Estimado del día para ejercicios aeróbicos: duración total (seg) y metros,
+  // contando micro pausas (entre repeticiones) y macro pausas (entre series).
+  const aeroEstimate = dayExercises.reduce((acc: { seconds: number; meters: number; any: boolean }, re: any) => {
+    if (re.workout_type !== "aerobic") return acc;
+    const S = re.sets ?? 0;
+    const R = re.reps ?? 0;
+    const T = re.duration_seconds ?? 0;   // tiempo por repetición (seg)
+    const D = re.distance_meters ?? 0;    // metros por repetición
+    const micro = re.micro_pause ?? 0;
+    const macro = re.macro_pause ?? 0;
+    const totalReps = S * R;
+    const workSec = totalReps * T;
+    const microSec = S * Math.max(0, R - 1) * micro;   // (R-1) micro pausas por serie
+    const macroSec = Math.max(0, S - 1) * macro;        // (S-1) macro pausas en total
+    acc.seconds += workSec + microSec + macroSec;
+    acc.meters += totalReps * D;
+    acc.any = true;
+    return acc;
+  }, { seconds: 0, meters: 0, any: false });
+  const aeroMin = Math.round(aeroEstimate.seconds / 60);
+  const aeroKm = aeroEstimate.meters / 1000;
+
   // (dayType / isAerobic se calculan más arriba, junto a routineExercises)
   useEffect(() => { setDayTypeSel(null); }, [selectedDay]);
 
@@ -943,6 +965,21 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
             >
               {noteSaved ? "Guardado" : saveSessionNote.isPending ? "Guardando..." : "Guardar mensaje"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Estimado del entrenamiento aeróbico del día (incluye micro y macro pausas) */}
+      {aeroEstimate.any && (
+        <div className="mb-3 flex items-center gap-3 bg-sky-500/10 border border-sky-500/30 rounded-lg px-3 py-2">
+          <span className="text-sky-500">⏱</span>
+          <div className="text-xs">
+            <span className="text-muted-foreground">Estimado aeróbico del día: </span>
+            <span className="font-bold text-foreground">{aeroMin} min</span>
+            {aeroEstimate.meters > 0 && (
+              <><span className="text-muted-foreground"> · </span><span className="font-bold text-foreground">{aeroKm % 1 === 0 ? aeroKm : aeroKm.toFixed(2)} km</span></>
+            )}
+            <span className="text-[10px] text-muted-foreground"> (con micro y macro pausas)</span>
           </div>
         </div>
       )}
