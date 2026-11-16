@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, Search, X, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import AerobicTests from "@/components/AerobicTests";
+
 import { format, parseISO, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -320,6 +322,11 @@ export default function StatsPage() {
             {" · "}{((kmMeters ?? 0)).toLocaleString("es-AR")} m
           </p>
         </div>
+      )}
+
+      {/* Tests aeróbicos (solo Aeróbico) */}
+      {selectedClient && statMode === "aerobico" && (
+        <AerobicTests clientId={selectedClient} />
       )}
 
       {/* Contenido del gráfico (solo Fuerza) */}

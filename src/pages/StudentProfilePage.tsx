@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import AerobicTests from "@/components/AerobicTests";
+
 import { useTheme } from "@/contexts/ThemeContext";
 import { User, Save, Sun, Moon, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -146,6 +148,9 @@ export default function StudentProfilePage() {
               <Input value={form.goal} onChange={set("goal")} placeholder="Ej: bajar de peso, ganar masa muscular..." />
             </div>
           </div>
+
+          {/* Tests aeróbicos (solo lectura) */}
+          {(client as any)?.id && <AerobicTests clientId={(client as any).id} readOnly />}
 
           {/* Preferencias */}
           <div className="bg-card border border-border rounded-xl p-5">
