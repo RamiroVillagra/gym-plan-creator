@@ -327,6 +327,10 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
   const replaceCat = replaceTarget
     ? ((exercises?.find(e => e.id === replaceTarget.exercise_id) as any)?.category_id ?? null)
     : null;
+  // Tipo del ejercicio que se está cambiando (no el del día, que puede ser mixto)
+  const replaceType = replaceTarget
+    ? (((exercises?.find(e => e.id === replaceTarget.exercise_id) as any)?.type as string) ?? replaceTarget.workout_type ?? "strength")
+    : "strength";
   // Ejercicios ya presentes esta semana (día actual + resto de la semana) para no repetir
   const inUseExerciseIds = new Set<string>([
     ...(_currentDayEx ?? []).map((re: any) => re.exercise_id),
@@ -337,7 +341,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
         .map(([exId, lastDate]) => ({ ex: exercises?.find(e => e.id === exId) as any, lastDate }))
         .filter(s => s.ex && !inUseExerciseIds.has(s.ex.id)
           && (s.ex.category_id ?? null) === replaceCat
-          && (((s.ex.type as string) ?? "strength") === dayType))
+          && (((s.ex.type as string) ?? "strength") === replaceType))
         .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
         .slice(0, 5)
     : [];
@@ -348,7 +352,7 @@ export default function RoutineDetailView({ routineId = "", routineName, totalDa
 
   // Filtrar ejercicios por tipo del día (fuerza/aeróbico), categoría y búsqueda
   const filteredExercises = exercises?.filter(ex => {
-    const matchType = (((ex as any).type as string) ?? "strength") === dayType;
+    const matchType = (((ex as any).type as string) ?? "strength") === (replaceTarget ? replaceType : dayType);
     const matchCategory = filterCategory
       ? (ex as any).category_id === filterCategory
       : true;
